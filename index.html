@@ -1,0 +1,445 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>國王別慌!小島守城</title>
+<style>
+  :root{
+    --sky:#8FD8CF; --sky2:#BDE9D2; --pine:#2E5648; --pine2:#1F3D33;
+    --sand:#EED9A4; --coral:#FF7B5C; --gold:#FFC94D; --ink:#25382F; --card:#FFF9EA;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%;overflow:hidden}
+  body{
+    background:linear-gradient(180deg,var(--pine2),var(--pine));
+    display:flex;align-items:center;justify-content:center;
+    font-family:"Yuanti TC","YouYuan","Microsoft JhengHei UI","PingFang TC",system-ui,sans-serif;
+    touch-action:manipulation;
+  }
+  #wrap{position:relative;height:100vh;aspect-ratio:420/760;max-width:100vw}
+  canvas{width:100%;height:100%;display:block;border-radius:0}
+  .overlay{
+    position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    gap:18px;text-align:center;background:rgba(31,61,51,.78);backdrop-filter:blur(4px);color:var(--card);
+    padding:24px;
+  }
+  .overlay.hidden{display:none}
+  .title{font-size:44px;font-weight:800;letter-spacing:2px;color:var(--gold);text-shadow:0 3px 0 rgba(0,0,0,.25)}
+  .sub{font-size:15px;line-height:1.9;opacity:.92;max-width:300px}
+  .btn{
+    font-family:inherit;font-size:20px;font-weight:700;color:#fff;background:var(--coral);
+    border:none;border-radius:999px;padding:14px 44px;cursor:pointer;
+    box-shadow:0 5px 0 #C9563C;letter-spacing:3px;
+  }
+  .btn:active{transform:translateY(3px);box-shadow:0 2px 0 #C9563C}
+  .totem-row{display:flex;flex-direction:column;gap:12px;width:100%;max-width:300px}
+  .totem{
+    font-family:inherit;background:var(--card);color:var(--ink);border:none;border-radius:16px;
+    padding:13px 16px;font-size:16px;font-weight:700;cursor:pointer;box-shadow:0 4px 0 #C9B47E;
+    display:flex;align-items:center;gap:12px;text-align:left;
+  }
+  .totem:active{transform:translateY(3px);box-shadow:0 1px 0 #C9B47E}
+  .totem .ic{font-size:26px}
+  .totem small{display:block;font-weight:400;font-size:12.5px;opacity:.75;margin-top:2px}
+  .score{font-size:20px;line-height:2}
+  .score b{color:var(--gold);font-size:34px}
+</style>
+
+<div id="wrap">
+  <canvas id="cv" width="420" height="760"></canvas>
+
+  <div id="menu" class="overlay">
+    <div class="title">國王別慌!</div>
+    <div class="sub">哥布林大軍朝城堡來了!<br>
+      💰 點「召喚」隨機派出小英雄<br>
+      🤝 點兩隻「同類同等級」合體升級<br>
+      🏰 撐越多波越厲害</div>
+    <button class="btn" id="startBtn">開 始</button>
+  </div>
+
+  <div id="totemBox" class="overlay hidden">
+    <div class="title" style="font-size:30px">🗿 圖騰祝福</div>
+    <div class="sub" style="margin-top:-8px">選一個,整場有效</div>
+    <div class="totem-row" id="totemRow"></div>
+  </div>
+
+  <div id="over" class="overlay hidden">
+    <div class="title" style="font-size:36px">城堡淪陷…</div>
+    <div class="score">你守住了 <b id="finalWave">0</b> 波<br><span id="bestLine" style="font-size:14px;opacity:.85"></span></div>
+    <button class="btn" id="againBtn">再來一場</button>
+  </div>
+</div>
+
+<script>
+"use strict";
+const cv = document.getElementById('cv'), ctx = cv.getContext('2d');
+const W = 420, H = 760;
+
+/* ---------- audio ---------- */
+let AC = null, muted = false;
+function beep(f, dur, type, vol, slide){
+  if (muted) return;
+  try{
+    AC = AC || new (window.AudioContext||window.webkitAudioContext)();
+    const o = AC.createOscillator(), g = AC.createGain();
+    o.type = type||'square'; o.frequency.value = f;
+    if (slide) o.frequency.exponentialRampToValueAtTime(slide, AC.currentTime+dur);
+    g.gain.value = vol||.04; g.gain.exponentialRampToValueAtTime(.0001, AC.currentTime+dur);
+    o.connect(g); g.connect(AC.destination); o.start(); o.stop(AC.currentTime+dur);
+  }catch(e){}
+}
+
+/* ---------- path & slots ---------- */
+const PATH = [ {x:60,y:-40},{x:60,y:150},{x:340,y:220},{x:80,y:330},{x:340,y:440},{x:180,y:545},{x:180,y:620} ];
+const CASTLE = {x:180,y:640};
+const SLOTS = [
+  {x:150,y:120},{x:215,y:158},{x:150,y:255},{x:250,y:290},
+  {x:160,y:395},{x:255,y:365},{x:90,y:470},{x:280,y:510}
+].map(p=>({...p,unit:null}));
+
+/* ---------- unit types ---------- */
+const TYPES = {
+  archer:{ name:'弓手', face:'🏹', body:'#6FBF73', range:150, cd:.62, dmg:8,  proj:'#8BE28F', splash:0 },
+  mage:  { name:'法師', face:'🔮', body:'#7E8FE0', range:125, cd:1.5, dmg:15, proj:'#A9B7FF', splash:62 },
+  spark: { name:'雷球', face:'⚡', body:'#E8B33C', range:138, cd:1.05,dmg:9,  proj:'#FFE38A', splash:0, chain:3 }
+};
+const TYPE_KEYS = Object.keys(TYPES);
+const LVL_MUL = l => Math.pow(2.2, l-1);
+
+/* ---------- state ---------- */
+let st;
+function reset(){
+  st = {
+    mode:'menu', t:0, wave:0, castle:10, castleMax:10, coins:30, summonCost:10,
+    enemies:[], projs:[], floats:[], puffs:[],
+    waveLeft:0, spawnT:0, betweenT:2, inWave:false,
+    sel:-1, shake:0,
+    buff:{ dmg:1, spd:1, coin:1 },
+    best: +(localStorage.getItem('kdp_best')||0)
+  };
+  SLOTS.forEach(s=>s.unit=null);
+}
+reset();
+
+/* ---------- waves ---------- */
+function waveHp(w){ return 8*Math.pow(1.33,w); }
+function startWave(){
+  st.wave++; st.inWave = true;
+  st.waveLeft = Math.min(6 + st.wave*2, 34);
+  st.spawnT = 0;
+  if (st.wave % 5 === 0) st.waveLeft = Math.max(4, Math.floor(st.waveLeft*.5));
+}
+function spawnEnemy(){
+  const boss = (st.wave % 5 === 0 && st.waveLeft === 1);
+  const hp = waveHp(st.wave) * (boss?12:1);
+  st.enemies.push({
+    wp:0, x:PATH[0].x, y:PATH[0].y, hp, maxHp:hp,
+    speed:(38 + Math.min(st.wave*1.2, 30)) * (boss?.6:1),
+    boss, wob:Math.random()*7, dead:false
+  });
+}
+
+/* ---------- helpers ---------- */
+function dist(a,b){ return Math.hypot(a.x-b.x, a.y-b.y); }
+function floatTxt(x,y,txt,col,size){ st.floats.push({x,y,txt,col,size:size||13,t:0}); }
+function puff(x,y,col,n){ for(let i=0;i<(n||7);i++) st.puffs.push({x,y,vx:(Math.random()-.5)*130,vy:(Math.random()-.5)*130-30,t:0,col}); }
+
+/* ---------- summon & merge ---------- */
+function trySummon(){
+  if (st.coins < st.summonCost) { floatTxt(W/2, H-135, '金幣不夠!', '#FF7B5C', 15); beep(160,.15,'sawtooth'); return; }
+  const empty = SLOTS.filter(s=>!s.unit);
+  if (!empty.length) { floatTxt(W/2, H-135, '沒空位了,先合體!', '#FF7B5C', 15); beep(160,.15,'sawtooth'); return; }
+  st.coins -= st.summonCost; st.summonCost += 2;
+  const slot = empty[Math.floor(Math.random()*empty.length)];
+  const type = TYPE_KEYS[Math.floor(Math.random()*TYPE_KEYS.length)];
+  slot.unit = { type, lvl:1, cd:0, pop:0 };
+  puff(slot.x, slot.y, '#FFFFFF');
+  beep(520,.12,'triangle',.05,780);
+}
+function tapSlot(i){
+  const s = SLOTS[i];
+  if (st.sel === -1){
+    if (s.unit){ st.sel = i; beep(440,.06,'sine'); }
+    return;
+  }
+  if (st.sel === i){ st.sel = -1; return; }
+  const a = SLOTS[st.sel], b = s;
+  if (a.unit && b.unit && a.unit.type===b.unit.type && a.unit.lvl===b.unit.lvl && a.unit.lvl<6){
+    b.unit.lvl++; b.unit.pop = .45; a.unit = null;
+    puff(b.x, b.y, '#FFC94D', 12);
+    floatTxt(b.x, b.y-34, 'LV'+b.unit.lvl+'!', '#FFC94D', 17);
+    beep(620,.16,'triangle',.06,930);
+  } else if (b.unit){ st.sel = i; beep(440,.06,'sine'); return; }
+  st.sel = -1;
+}
+
+/* ---------- totem ---------- */
+const TOTEMS = [
+  {ic:'⚔️', t:'銳利圖騰', d:'全體攻擊力 +25%', f:()=>st.buff.dmg*=1.25},
+  {ic:'💨', t:'疾風圖騰', d:'攻擊速度 +20%',   f:()=>st.buff.spd*=1.2},
+  {ic:'🪙', t:'豐收圖騰', d:'金幣獲得 +35%',   f:()=>st.buff.coin*=1.35},
+  {ic:'🏰', t:'城牆圖騰', d:'城堡回復並上限 +3', f:()=>{st.castleMax+=3; st.castle=Math.min(st.castle+3,st.castleMax);}},
+  {ic:'💥', t:'爆裂圖騰', d:'法師濺射範圍 +40%', f:()=>TYPES.mage.splash*=1.4},
+  {ic:'🎯', t:'鷹眼圖騰', d:'全體射程 +15%',   f:()=>TYPE_KEYS.forEach(k=>TYPES[k].range*=1.15)}
+];
+function offerTotems(){
+  st.mode='totem';
+  const picks=[...TOTEMS].sort(()=>Math.random()-.5).slice(0,3);
+  const row=document.getElementById('totemRow'); row.innerHTML='';
+  picks.forEach(p=>{
+    const b=document.createElement('button'); b.className='totem';
+    b.innerHTML='<span class="ic">'+p.ic+'</span><span>'+p.t+'<small>'+p.d+'</small></span>';
+    b.onclick=()=>{ p.f(); document.getElementById('totemBox').classList.add('hidden'); st.mode='play'; beep(700,.14,'triangle',.06,1000); };
+    row.appendChild(b);
+  });
+  document.getElementById('totemBox').classList.remove('hidden');
+}
+
+/* ---------- update ---------- */
+function update(dt){
+  st.t += dt;
+  if (st.mode!=='play') return;
+
+  // wave flow
+  if (st.inWave){
+    if (st.waveLeft>0){
+      st.spawnT -= dt;
+      if (st.spawnT<=0){ spawnEnemy(); st.waveLeft--; st.spawnT = st.wave%5===0 && st.waveLeft===0 ? .9 : Math.max(.35, .95 - st.wave*.02); }
+    } else if (!st.enemies.length){
+      st.inWave=false; st.betweenT=2.2;
+      const bonus=Math.round((14+st.wave*2)*st.buff.coin);
+      st.coins+=bonus; floatTxt(W/2,300,'波次獎勵 +'+bonus+' 💰','#FFC94D',17);
+      beep(560,.2,'triangle',.05,840);
+      if (st.wave%5===0) offerTotems();
+    }
+  } else {
+    st.betweenT-=dt;
+    if (st.betweenT<=0) startWave();
+  }
+
+  // enemies
+  for (const e of st.enemies){
+    const tgt=PATH[e.wp+1];
+    if (!tgt){ e.dead=true; st.castle--; st.shake=.35; beep(120,.3,'sawtooth',.07); floatTxt(CASTLE.x,CASTLE.y-50,'-1 🏰','#FF5A5A',18);
+      if (st.castle<=0) gameOver(); continue; }
+    const d=Math.hypot(tgt.x-e.x,tgt.y-e.y);
+    if (d<3){ e.wp++; continue; }
+    e.x+=(tgt.x-e.x)/d*e.speed*dt; e.y+=(tgt.y-e.y)/d*e.speed*dt;
+  }
+  st.enemies=st.enemies.filter(e=>!e.dead);
+
+  // units fire
+  for (const s of SLOTS){
+    const u=s.unit; if(!u) continue;
+    u.pop=Math.max(0,u.pop-dt*2);
+    u.cd-=dt*st.buff.spd;
+    if (u.cd>0) continue;
+    const T=TYPES[u.type];
+    let best=null,bd=1e9;
+    for (const e of st.enemies){ const d=dist(s,e); if (d<=T.range && e.wp*1000+d < bd){ bd=e.wp*1000+d; best=e; } }
+    // 前面的優先:用 wp 排序過的 bd。改成最靠近城堡優先:
+    best=null; let bw=-1;
+    for (const e of st.enemies){ const d=dist(s,e); if (d<=T.range){ const prog=e.wp*1000-Math.hypot(PATH[e.wp+1]?PATH[e.wp+1].x-e.x:0,PATH[e.wp+1]?PATH[e.wp+1].y-e.y:0); if(prog>bw){bw=prog;best=e;} } }
+    if (!best) continue;
+    u.cd=T.cd;
+    st.projs.push({x:s.x,y:s.y-14,tgt:best,type:u.type,dmg:T.dmg*LVL_MUL(u.lvl)*st.buff.dmg,speed:430});
+    beep(u.type==='archer'?900:u.type==='mage'?300:660,.05,u.type==='mage'?'sine':'square',.02);
+  }
+
+  // projectiles
+  for (const p of st.projs){
+    if (p.tgt.dead || p.tgt.hp<=0){ p.done=true; continue; }
+    const d=Math.hypot(p.tgt.x-p.x,p.tgt.y-p.y);
+    if (d<10){ p.done=true; hit(p); continue; }
+    p.x+=(p.tgt.x-p.x)/d*p.speed*dt; p.y+=(p.tgt.y-p.y)/d*p.speed*dt;
+  }
+  st.projs=st.projs.filter(p=>!p.done);
+
+  // fx
+  for (const f of st.floats) f.t+=dt;
+  st.floats=st.floats.filter(f=>f.t<1);
+  for (const q of st.puffs){ q.t+=dt; q.x+=q.vx*dt; q.y+=q.vy*dt; q.vy+=160*dt; }
+  st.puffs=st.puffs.filter(q=>q.t<.55);
+  st.shake=Math.max(0,st.shake-dt);
+}
+
+function hit(p){
+  const T=TYPES[p.type];
+  damage(p.tgt,p.dmg);
+  if (T.splash){ for (const e of st.enemies){ if (e!==p.tgt && !e.dead && Math.hypot(e.x-p.tgt.x,e.y-p.tgt.y)<=T.splash) damage(e,p.dmg*.6); } puff(p.tgt.x,p.tgt.y,'#A9B7FF',9); }
+  if (T.chain){ let src=p.tgt,n=T.chain,dmg=p.dmg*.65,hitset=new Set([p.tgt]);
+    while(n-->0){ let nx=null,nd=95;
+      for (const e of st.enemies){ if(!hitset.has(e)&&!e.dead){ const d=Math.hypot(e.x-src.x,e.y-src.y); if(d<nd){nd=d;nx=e;} } }
+      if(!nx)break; damage(nx,dmg); hitset.add(nx); st.puffs.push({x:(src.x+nx.x)/2,y:(src.y+nx.y)/2,vx:0,vy:0,t:.35,col:'#FFE38A'}); src=nx; dmg*=.65; }
+  }
+}
+function damage(e,d){
+  e.hp-=d;
+  floatTxt(e.x+(Math.random()*16-8), e.y-22, Math.round(d), '#FFF3D6', e.boss?15:12);
+  if (e.hp<=0 && !e.dead){
+    e.dead=true;
+    const c=Math.round((2+st.wave*.6)*(e.boss?10:1)*st.buff.coin);
+    st.coins+=c;
+    floatTxt(e.x,e.y-8,'+'+c+'💰','#FFC94D',e.boss?18:13);
+    puff(e.x,e.y,e.boss?'#FF9C6B':'#B7E3A1',e.boss?18:8);
+    beep(e.boss?200:340,e.boss?.35:.09,'triangle',.05,e.boss?90:220);
+  }
+}
+function gameOver(){
+  st.mode='over';
+  if (st.wave>st.best){ st.best=st.wave; localStorage.setItem('kdp_best',st.best); }
+  document.getElementById('finalWave').textContent=st.wave;
+  document.getElementById('bestLine').textContent='最佳紀錄:'+st.best+' 波';
+  document.getElementById('over').classList.remove('hidden');
+}
+
+/* ---------- draw ---------- */
+function rr(x,y,w,h,r){ ctx.beginPath(); ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r); ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath(); }
+
+function draw(){
+  ctx.save();
+  if (st.shake>0) ctx.translate((Math.random()-.5)*8*st.shake,(Math.random()-.5)*8*st.shake);
+
+  // sky→meadow
+  const g=ctx.createLinearGradient(0,0,0,H);
+  g.addColorStop(0,'#8FD8CF'); g.addColorStop(.28,'#BDE9D2'); g.addColorStop(.32,'#A8DA82'); g.addColorStop(1,'#8FCB6B');
+  ctx.fillStyle=g; ctx.fillRect(0,0,W,H);
+  // clouds
+  ctx.fillStyle='rgba(255,255,255,.75)';
+  [[70,60,26],[290,44,20],[350,95,15]].forEach(([x,y,r],i)=>{
+    const ox=Math.sin(st.t*.25+i*2)*8;
+    ctx.beginPath(); ctx.arc(x+ox,y,r,0,7); ctx.arc(x+ox+r*.9,y+4,r*.75,0,7); ctx.arc(x+ox-r*.9,y+5,r*.7,0,7); ctx.fill();
+  });
+
+  // path
+  ctx.strokeStyle='#EED9A4'; ctx.lineWidth=34; ctx.lineJoin='round'; ctx.lineCap='round';
+  ctx.beginPath(); ctx.moveTo(PATH[0].x,PATH[0].y);
+  for (const p of PATH.slice(1)) ctx.lineTo(p.x,p.y); ctx.stroke();
+  ctx.strokeStyle='rgba(0,0,0,.07)'; ctx.lineWidth=34; ctx.setLineDash([2,26]); ctx.stroke(); ctx.setLineDash([]);
+
+  // castle
+  ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.font='54px serif'; ctx.fillText('🏰',CASTLE.x,CASTLE.y);
+  // castle hp pips
+  for (let i=0;i<st.castleMax;i++){
+    const px=CASTLE.x-(st.castleMax-1)*5.5+i*11;
+    ctx.fillStyle=i<st.castle?'#FF6B81':'rgba(0,0,0,.18)';
+    ctx.beginPath(); ctx.arc(px,CASTLE.y-46,4,0,7); ctx.fill();
+  }
+
+  // slots & units
+  SLOTS.forEach((s,i)=>{
+    ctx.fillStyle='rgba(255,255,255,.35)';
+    rr(s.x-26,s.y-26,52,52,14); ctx.fill();
+    if (st.sel===i){
+      ctx.strokeStyle='#FF7B5C'; ctx.lineWidth=3; rr(s.x-28,s.y-28,56,56,15); ctx.stroke();
+      if (s.unit){ const T=TYPES[s.unit.type]; ctx.strokeStyle='rgba(255,123,92,.4)'; ctx.lineWidth=1.5;
+        ctx.beginPath(); ctx.arc(s.x,s.y,T.range,0,7); ctx.stroke(); }
+    }
+    const u=s.unit; if(!u) return;
+    const T=TYPES[u.type];
+    const wob=Math.sin(st.t*3+i)*2, pop=1+u.pop*.5;
+    // body
+    ctx.fillStyle=T.body;
+    ctx.beginPath(); ctx.ellipse(s.x,s.y+4+wob*.3,19*pop,17*pop,0,0,7); ctx.fill();
+    ctx.fillStyle='rgba(255,255,255,.28)';
+    ctx.beginPath(); ctx.ellipse(s.x-5,s.y-2+wob*.3,7*pop,5*pop,0,0,7); ctx.fill();
+    // face
+    ctx.font=(20*pop)+'px serif'; ctx.fillText(T.face,s.x,s.y-14+wob);
+    // level badge
+    ctx.fillStyle='#2E5648'; rr(s.x+8,s.y+10,22,15,7); ctx.fill();
+    ctx.fillStyle='#FFC94D'; ctx.font='bold 10.5px sans-serif'; ctx.fillText('Lv'+u.lvl,s.x+19,s.y+18);
+  });
+
+  // enemies
+  for (const e of st.enemies){
+    const r=e.boss?26:14, wob=Math.sin(st.t*7+e.wob)*2.4;
+    ctx.fillStyle='rgba(0,0,0,.12)';
+    ctx.beginPath(); ctx.ellipse(e.x,e.y+r*.85,r*.8,r*.3,0,0,7); ctx.fill();
+    ctx.font=(e.boss?46:26)+'px serif';
+    ctx.fillText(e.boss?'👹':'👺',e.x,e.y+wob);
+    // hp bar
+    const bw=e.boss?46:26;
+    ctx.fillStyle='rgba(0,0,0,.25)'; rr(e.x-bw/2,e.y-(e.boss?36:24),bw,4.5,2); ctx.fill();
+    ctx.fillStyle=e.boss?'#FF6B81':'#8BE28F'; rr(e.x-bw/2,e.y-(e.boss?36:24),bw*Math.max(0,e.hp/e.maxHp),4.5,2); ctx.fill();
+  }
+
+  // projectiles
+  for (const p of st.projs){
+    ctx.fillStyle=TYPES[p.type].proj;
+    ctx.beginPath(); ctx.arc(p.x,p.y,p.type==='mage'?6:4,0,7); ctx.fill();
+  }
+
+  // puffs
+  for (const q of st.puffs){
+    ctx.globalAlpha=1-q.t/.55; ctx.fillStyle=q.col;
+    ctx.beginPath(); ctx.arc(q.x,q.y,4.5,0,7); ctx.fill(); ctx.globalAlpha=1;
+  }
+  // float texts
+  for (const f of st.floats){
+    ctx.globalAlpha=1-f.t; ctx.fillStyle=f.col;
+    ctx.font='bold '+f.size+'px sans-serif';
+    ctx.fillText(f.txt,f.x,f.y-f.t*26); ctx.globalAlpha=1;
+  }
+
+  drawHud();
+  ctx.restore();
+}
+
+function drawHud(){
+  // top bar
+  ctx.fillStyle='rgba(31,61,51,.85)'; rr(10,10,W-20,44,14); ctx.fill();
+  ctx.textAlign='left'; ctx.fillStyle='#FFF9EA'; ctx.font='bold 16px sans-serif';
+  const waveTxt = st.inWave ? '第 '+st.wave+' 波' : (st.wave===0?'準備中…':'第 '+(st.wave+1)+' 波 即將來襲');
+  ctx.fillText('🌊 '+waveTxt, 24, 32);
+  ctx.textAlign='right';
+  ctx.fillStyle='#FFC94D'; ctx.fillText('💰 '+st.coins, W-24, 32);
+  ctx.textAlign='center';
+
+  // bottom bar
+  ctx.fillStyle='rgba(31,61,51,.85)'; rr(10,H-92,W-20,82,18); ctx.fill();
+  // summon button
+  const can = st.coins>=st.summonCost && SLOTS.some(s=>!s.unit);
+  ctx.fillStyle=can?'#FF7B5C':'#7A6E62'; rr(26,H-80,150,58,16); ctx.fill();
+  ctx.fillStyle='#fff'; ctx.font='bold 19px sans-serif'; ctx.fillText('召喚英雄',101,H-58);
+  ctx.font='bold 13px sans-serif'; ctx.fillText('💰'+st.summonCost,101,H-38);
+  // hint
+  ctx.fillStyle='rgba(255,249,234,.9)'; ctx.font='13px sans-serif'; ctx.textAlign='left';
+  ctx.fillText('點兩隻同類同級 → 合體升級', 196, H-62);
+  ctx.fillText('🏹快攻 🔮濺射 ⚡連鎖', 196, H-40);
+  ctx.textAlign='center';
+}
+
+/* ---------- input ---------- */
+function toXY(ev){
+  const r=cv.getBoundingClientRect();
+  const p=ev.touches?ev.touches[0]:ev;
+  return { x:(p.clientX-r.left)/r.width*W, y:(p.clientY-r.top)/r.height*H };
+}
+function tap(ev){
+  if (st.mode!=='play') return;
+  ev.preventDefault();
+  const {x,y}=toXY(ev);
+  if (x>26&&x<176&&y>H-80&&y<H-22){ trySummon(); return; }
+  let hit=-1,hd=40;
+  SLOTS.forEach((s,i)=>{ const d=Math.hypot(s.x-x,s.y-y); if(d<hd){hd=d;hit=i;} });
+  if (hit>=0) tapSlot(hit); else st.sel=-1;
+}
+cv.addEventListener('pointerdown',tap);
+
+document.getElementById('startBtn').onclick=()=>{
+  document.getElementById('menu').classList.add('hidden');
+  reset(); st.mode='play'; beep(660,.15,'triangle',.06,990);
+};
+document.getElementById('againBtn').onclick=()=>{
+  document.getElementById('over').classList.add('hidden');
+  reset(); st.mode='play';
+};
+
+/* ---------- loop ---------- */
+let last=performance.now();
+function loop(now){
+  const dt=Math.min((now-last)/1000,.05); last=now;
+  update(dt); draw();
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+</script>
