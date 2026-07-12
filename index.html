@@ -104,6 +104,30 @@ const TYPES = {
 const TYPE_KEYS = Object.keys(TYPES);
 const LVL_MUL = l => Math.pow(2.2, l-1);
 
+/* ---------- gacha rarity (teaching: rates + pity + power) ---------- */
+// 公開機率表:總和 100。星級越高,起始等級與傷害倍率越高 → 稀有度直接換算戰力。
+const RARITY = [
+  {key:'N',   name:'普通',  rate:70, col:'#AEB9C4', star:1, startLvl:1, mul:1.00},
+  {key:'R',   name:'稀有',  rate:22, col:'#6FBF73', star:2, startLvl:1, mul:1.35},
+  {key:'SR',  name:'超稀有', rate:6,  col:'#7E8FE0', star:3, startLvl:2, mul:1.80},
+  {key:'SSR', name:'極稀有', rate:2,  col:'#FFC94D', star:4, startLvl:3, mul:2.60}
+];
+const PITY = 10; // 連抽未出 SR 以上,第 10 抽保底
+function weightedPick(pool){
+  const sum = pool.reduce((a,x)=>a+x.rate,0);
+  let r = Math.random()*sum;
+  for (const x of pool){ if ((r-=x.rate)<=0) return x; }
+  return pool[pool.length-1];
+}
+function rollRarity(){
+  st.pity++;
+  const forced = st.pity>=PITY;                       // 保底觸發
+  const pool = forced ? RARITY.filter(x=>x.star>=3) : RARITY;
+  const r = weightedPick(pool);
+  if (r.star>=3) st.pity = 0;                          // 出 SR+ 重置保底計數
+  return r;
+}
+
 /* ---------- state ---------- */
 let st;
 function reset(){
@@ -111,7 +135,7 @@ function reset(){
     mode:'menu', t:0, wave:0, castle:10, castleMax:10, coins:30, summonCost:10,
     enemies:[], projs:[], floats:[], puffs:[],
     waveLeft:0, spawnT:0, betweenT:2, inWave:false,
-    sel:-1, shake:0,
+    sel:-1, shake:0, pity:0,
     buff:{ dmg:1, spd:1, coin:1 },
     best: +(localStorage.getItem('kdp_best')||0)
   };
@@ -150,9 +174,11 @@ function trySummon(){
   st.coins -= st.summonCost; st.summonCost += 2;
   const slot = empty[Math.floor(Math.random()*empty.length)];
   const type = TYPE_KEYS[Math.floor(Math.random()*TYPE_KEYS.length)];
-  slot.unit = { type, lvl:1, cd:0, pop:0 };
-  puff(slot.x, slot.y, '#FFFFFF');
-  beep(520,.12,'triangle',.05,780);
+  const rar = rollRarity();
+  slot.unit = { type, lvl:rar.startLvl, cd:0, pop:.45, star:rar.star, mul:rar.mul, rarCol:rar.col };
+  puff(slot.x, slot.y, rar.col, rar.star>=3?12:7);
+  floatTxt(slot.x, slot.y-34, rar.key, rar.col, rar.star>=3?18:14);
+  beep(rar.star>=3?720:520, rar.star>=3?.2:.12, 'triangle', .05, rar.star>=3?1080:780);
 }
 function tapSlot(i){
   const s = SLOTS[i];
@@ -163,7 +189,11 @@ function tapSlot(i){
   if (st.sel === i){ st.sel = -1; return; }
   const a = SLOTS[st.sel], b = s;
   if (a.unit && b.unit && a.unit.type===b.unit.type && a.unit.lvl===b.unit.lvl && a.unit.lvl<6){
-    b.unit.lvl++; b.unit.pop = .45; a.unit = null;
+    b.unit.lvl++; b.unit.pop = .45;
+    b.unit.star = Math.max(a.unit.star, b.unit.star);   // 合體保留較高星級與倍率
+    b.unit.mul  = Math.max(a.unit.mul,  b.unit.mul);
+    b.unit.rarCol = a.unit.mul>b.unit.mul ? a.unit.rarCol : b.unit.rarCol;
+    a.unit = null;
     puff(b.x, b.y, '#FFC94D', 12);
     floatTxt(b.x, b.y-34, 'LV'+b.unit.lvl+'!', '#FFC94D', 17);
     beep(620,.16,'triangle',.06,930);
@@ -240,7 +270,9 @@ function update(dt){
     for (const e of st.enemies){ const d=dist(s,e); if (d<=T.range){ const prog=e.wp*1000-Math.hypot(PATH[e.wp+1]?PATH[e.wp+1].x-e.x:0,PATH[e.wp+1]?PATH[e.wp+1].y-e.y:0); if(prog>bw){bw=prog;best=e;} } }
     if (!best) continue;
     u.cd=T.cd;
-    st.projs.push({x:s.x,y:s.y-14,tgt:best,type:u.type,dmg:T.dmg*LVL_MUL(u.lvl)*st.buff.dmg,speed:430});
+    // 傷害公式:基礎 × 等級成長 × 星級倍率 × 圖騰buff(教學:稀有度直接進乘法)
+    const dmg = T.dmg * LVL_MUL(u.lvl) * (u.mul||1) * st.buff.dmg;
+    st.projs.push({x:s.x,y:s.y-14,tgt:best,type:u.type,dmg,speed:430});
     beep(u.type==='archer'?900:u.type==='mage'?300:660,.05,u.type==='mage'?'sine':'square',.02);
   }
 
@@ -337,6 +369,9 @@ function draw(){
     const u=s.unit; if(!u) return;
     const T=TYPES[u.type];
     const wob=Math.sin(st.t*3+i)*2, pop=1+u.pop*.5;
+    // rarity ring
+    if (u.star>=3){ ctx.strokeStyle=u.rarCol; ctx.lineWidth=2.5;
+      ctx.beginPath(); ctx.ellipse(s.x,s.y+4,21*pop,19*pop,0,0,7); ctx.stroke(); }
     // body
     ctx.fillStyle=T.body;
     ctx.beginPath(); ctx.ellipse(s.x,s.y+4+wob*.3,19*pop,17*pop,0,0,7); ctx.fill();
@@ -344,6 +379,10 @@ function draw(){
     ctx.beginPath(); ctx.ellipse(s.x-5,s.y-2+wob*.3,7*pop,5*pop,0,0,7); ctx.fill();
     // face
     ctx.font=(20*pop)+'px serif'; ctx.fillText(T.face,s.x,s.y-14+wob);
+    // star pips (rarity)
+    ctx.fillStyle=u.rarCol||'#AEB9C4'; ctx.font='9px sans-serif';
+    let stars=''; for(let k=0;k<(u.star||1);k++) stars+='★';
+    ctx.fillText(stars, s.x, s.y-30);
     // level badge
     ctx.fillStyle='#2E5648'; rr(s.x+8,s.y+10,22,15,7); ctx.fill();
     ctx.fillStyle='#FFC94D'; ctx.font='bold 10.5px sans-serif'; ctx.fillText('Lv'+u.lvl,s.x+19,s.y+18);
@@ -401,10 +440,16 @@ function drawHud(){
   ctx.fillStyle=can?'#FF7B5C':'#7A6E62'; rr(26,H-80,150,58,16); ctx.fill();
   ctx.fillStyle='#fff'; ctx.font='bold 19px sans-serif'; ctx.fillText('召喚英雄',101,H-58);
   ctx.font='bold 13px sans-serif'; ctx.fillText('💰'+st.summonCost,101,H-38);
-  // hint
-  ctx.fillStyle='rgba(255,249,234,.9)'; ctx.font='13px sans-serif'; ctx.textAlign='left';
-  ctx.fillText('點兩隻同類同級 → 合體升級', 196, H-62);
-  ctx.fillText('🏹快攻 🔮濺射 ⚡連鎖', 196, H-40);
+  // rates + pity (published, like a real gacha banner)
+  ctx.textAlign='left';
+  ctx.font='11.5px sans-serif';
+  ctx.fillStyle='#AEB9C4'; ctx.fillText('N 70%',196,H-66);
+  ctx.fillStyle='#6FBF73'; ctx.fillText('R 22%',248,H-66);
+  ctx.fillStyle='#7E8FE0'; ctx.fillText('SR 6%',300,H-66);
+  ctx.fillStyle='#FFC94D'; ctx.fillText('SSR 2%',352,H-66);
+  ctx.fillStyle='rgba(255,249,234,.92)'; ctx.font='12px sans-serif';
+  ctx.fillText('保底:'+(PITY-st.pity)+' 抽內必出 SR＋', 196, H-46);
+  ctx.fillText('同類同級合體｜🏹快攻 🔮濺射 ⚡連鎖', 196, H-28);
   ctx.textAlign='center';
 }
 
