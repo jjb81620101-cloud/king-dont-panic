@@ -58,8 +58,9 @@
 
   <div id="menu" class="overlay">
     <div class="title">國王別慌!</div>
-    <div class="sub">哥布林大軍朝城堡來了!<br>
-      💰 點「召喚」隨機派出小英雄<br>
+    <div class="sub">哥布林大軍從天而降,直撲城牆!<br>
+      👺 敵人從上方進攻城牆,別讓它們撞牆<br>
+      💰 點「召喚」隨機派出小英雄站上城牆<br>
       🤝 點兩隻「同類同等級」合體升級<br>
       🏰 撐越多波越厲害</div>
     <button class="btn" id="startBtn">開 始</button>
@@ -109,24 +110,26 @@ function beep(f, dur, type, vol, slide){
   }catch(e){}
 }
 
-/* ---------- path & slots ---------- */
-const PATH = [ {x:60,y:-40},{x:60,y:150},{x:340,y:220},{x:80,y:330},{x:340,y:440},{x:180,y:545},{x:180,y:620} ];
-const CASTLE = {x:180,y:640};
-const SLOTS = [
-  {x:150,y:120},{x:215,y:158},{x:150,y:255},{x:250,y:290},
-  {x:160,y:395},{x:255,y:365},{x:90,y:470},{x:280,y:510}
-].map(p=>({...p,unit:null}));
-// 8 槽位鄰接表:依實際像素座標算兩兩距離,取 <=150 視為直接相鄰(對稱)。
+/* ---------- wall & slots (城牆式防守佈局) ---------- */
+// 城牆帶:雉堞造型畫在 WALL_TOP~WALL_BOTTOM,牆血條畫在牆帶正下方。
+// 敵人從畫面頂部往下壓,y>=WALL_TOP 視為撞牆。上方為戰場(天空/地面漸層)。
+const WALL_TOP = 600, WALL_BOTTOM = 660;
+const SLOT_Y = 628;
+const PET_ICON = { x: W-18, y: WALL_TOP-14 };
+const SLOTS = Array.from({length:8}, (_,i)=>({
+  x: (W/8)*(i+0.5), y: SLOT_Y, unit: null
+}));
+// 8 槽位鄰接表:橫排一列,鄰接 = 左右相鄰索引(index±1)。
 // 用於 😇 輔助光環判定「相鄰槽位」。
 const ADJ = [
-  [1,2],       // 0
-  [0,2,3],     // 1
-  [0,1,3,4],   // 2
-  [1,2,4,5],   // 3
-  [2,3,5,6],   // 4
-  [3,4,7],     // 5
-  [4],         // 6
-  [5]          // 7
+  [1],         // 0
+  [0,2],       // 1
+  [1,3],       // 2
+  [2,4],       // 3
+  [3,5],       // 4
+  [4,6],       // 5
+  [5,7],       // 6
+  [6]          // 7
 ];
 function auraBuff(i){
   let sum = 0;
@@ -134,7 +137,7 @@ function auraBuff(i){
     const nb = SLOTS[j].unit;
     if (nb && nb.type==='support') sum += (0.10+0.06*nb.lvl)*(nb.mul||1);
   }
-  return sum;
+  return sum * (st.buff.auraMul||1);
 }
 
 /* ---------- unit types ---------- */
@@ -208,7 +211,7 @@ function loadVault(){
   if (!v || typeof v!=='object') v = {};
   if (typeof v.diamonds!=='number') v.diamonds = 0;
   if (!v.gear) v.gear = { weapon:null, charm:null, pet:null };
-  if (!v.pullCounts) v.pullCounts = { N:0, R:0, SR:0, SSR:0 };
+  if (!v.pullCounts || typeof v.pullCounts !== 'object') v.pullCounts = { N:0, R:0, SR:0, SSR:0 };
   if (typeof v.gearPity!=='number') v.gearPity = 0;
   if (typeof v.firstVisit!=='boolean') v.firstVisit = false;
   return v;
@@ -290,7 +293,7 @@ function reset(){
     enemies:[], projs:[], floats:[], puffs:[],
     waveLeft:0, spawnT:0, betweenT:2, inWave:false,
     sel:-1, shake:0, pity:0,
-    buff:{ dmg:1, spd:1, coin:1, frostCap:.55, frostBonus:0, poisonCapBonus:0, poisonDmgMul:1,
+    buff:{ dmg:1, spd:1, coin:1, frostCap:.55, frostBonus:0, poisonCapBonus:0, poisonDmgMul:1, auraMul:1,
            gearDmg: gWeapon ? (1+gWeapon.value) : 1, gearCoin: (gPet && gPet.species==='cat') ? (1+gPet.value) : 1 },
     diversity:{ count:0, bonus:0 },
     chapterLog:[], chapterBanner:null,
@@ -345,7 +348,7 @@ function spawnEnemy(){
   const boss = (st.wave % 5 === 0 && st.waveLeft === 1);
   const hp = waveHp(st.wave) * (boss?12:1);
   st.enemies.push({
-    wp:0, x:PATH[0].x, y:PATH[0].y, hp, maxHp:hp,
+    x: 20+Math.random()*(W-40), y:-30, hp, maxHp:hp,
     speed:(38 + Math.min(st.wave*1.2, 30)) * (boss?.6:1),
     boss, wob:Math.random()*7, dead:false,
     slow:null, poison:[], poisonTickT:.5
@@ -401,7 +404,14 @@ const TOTEMS = [
   {ic:'💥', t:'爆裂圖騰', d:'法師濺射範圍 +40%', f:()=>TYPES.mage.splash*=1.4},
   {ic:'🎯', t:'鷹眼圖騰', d:'全體射程 +15%',   f:()=>TYPE_KEYS.forEach(k=>TYPES[k].range*=1.15)},
   {ic:'❄️', t:'寒霜圖騰', d:'冰法減速再 +10%,上限 70%', f:()=>{ st.buff.frostBonus+=0.10; st.buff.frostCap=0.70; }},
-  {ic:'☣️', t:'瘟疫圖騰', d:'中毒層數上限 +2,每層傷害 +25%', f:()=>{ st.buff.poisonCapBonus+=2; st.buff.poisonDmgMul*=1.25; }}
+  {ic:'☣️', t:'瘟疫圖騰', d:'中毒層數上限 +2,每層傷害 +25%', f:()=>{ st.buff.poisonCapBonus+=2; st.buff.poisonDmgMul*=1.25; }},
+  // 兵種技能卡(擴充池,承載於同一套圖騰機制,不做新 UI)
+  {ic:'🗡️', t:'萬劍歸宗', d:'弓手傷害 +30%', f:()=>TYPES.archer.dmg*=1.3},
+  {ic:'🔥', t:'烈焰爆裂', d:'法師濺射範圍 +40%', f:()=>TYPES.mage.splash*=1.4},
+  {ic:'🌩️', t:'雷霆萬鈞', d:'雷球連鎖再跳 +1 個目標', f:()=>TYPES.spark.chain+=1},
+  {ic:'🌨️', t:'冰雪鳳鳴', d:'冰法減速再 +8%,上限 70%', f:()=>{ st.buff.frostBonus+=0.08; st.buff.frostCap=0.70; }},
+  {ic:'🕷️', t:'劇毒蛛皇', d:'中毒層數上限 +1', f:()=>{ st.buff.poisonCapBonus+=1; }},
+  {ic:'📜', t:'神聖契約', d:'😇 輔助光環效果 +25%', f:()=>{ st.buff.auraMul=(st.buff.auraMul||1)*1.25; }}
 ];
 function offerTotems(){
   st.mode='totem';
@@ -442,15 +452,20 @@ function update(dt){
     if (st.betweenT<=0) startWave();
   }
 
-  // enemies
+  // enemies:從頂部往下壓,撞牆(y>=WALL_TOP)扣血後消失(普通1/Boss3),冰法減速作用於下降速度
   for (const e of st.enemies){
-    const tgt=PATH[e.wp+1];
-    if (!tgt){ e.dead=true; st.castle--; st.shake=.35; beep(120,.3,'sawtooth',.07); floatTxt(CASTLE.x,CASTLE.y-50,'-1 🏰','#FF5A5A',18);
-      if (st.castle<=0) gameOver(); continue; }
-    const d=Math.hypot(tgt.x-e.x,tgt.y-e.y);
-    if (d<3){ e.wp++; continue; }
+    if (e.y >= WALL_TOP){
+      e.dead = true;
+      const dmgToWall = e.boss ? 3 : 1;
+      st.castle -= dmgToWall;
+      st.shake = .35;
+      beep(120,.3,'sawtooth',.07);
+      floatTxt(e.x, WALL_TOP-10, '-'+dmgToWall+' 🏰', '#FF5A5A', 18);
+      if (st.castle<=0) gameOver();
+      continue;
+    }
     const slowMul = (e.slow && st.t<e.slow.until) ? (1-e.slow.frac) : 1;
-    e.x+=(tgt.x-e.x)/d*e.speed*slowMul*dt; e.y+=(tgt.y-e.y)/d*e.speed*slowMul*dt;
+    e.y += e.speed*slowMul*dt;
   }
   st.enemies=st.enemies.filter(e=>!e.dead);
 
@@ -479,11 +494,9 @@ function update(dt){
     if (T.noAttack) continue; // 😇 輔助:不攻擊,只提供相鄰光環
     u.cd-=dt*st.buff.spd;
     if (u.cd>0) continue;
-    let best=null,bd=1e9;
-    for (const e of st.enemies){ const d=dist(s,e); if (d<=T.range && e.wp*1000+d < bd){ bd=e.wp*1000+d; best=e; } }
-    // 前面的優先:用 wp 排序過的 bd。改成最靠近城堡優先:
-    best=null; let bw=-1;
-    for (const e of st.enemies){ const d=dist(s,e); if (d<=T.range){ const prog=e.wp*1000-Math.hypot(PATH[e.wp+1]?PATH[e.wp+1].x-e.x:0,PATH[e.wp+1]?PATH[e.wp+1].y-e.y:0); if(prog>bw){bw=prog;best=e;} } }
+    // 全螢幕射程,無 range 概念:每格英雄獨立索敵,目標=最接近牆的敵人(y 最大者)
+    let best=null, by=-1;
+    for (const e of st.enemies){ if (e.y>by){ by=e.y; best=e; } }
     if (!best) continue;
     u.cd=T.cd;
     // 傷害公式:基礎 × 等級成長 × 星級倍率 × 圖騰buff × 裝備武器buff × (1+相鄰😇輔助光環) × (1+職業羈絆加成)
@@ -582,10 +595,10 @@ function draw(){
   ctx.save();
   if (st.shake>0) ctx.translate((Math.random()-.5)*8*st.shake,(Math.random()-.5)*8*st.shake);
 
-  // sky→meadow
-  const g=ctx.createLinearGradient(0,0,0,H);
-  g.addColorStop(0,'#8FD8CF'); g.addColorStop(.28,'#BDE9D2'); g.addColorStop(.32,'#A8DA82'); g.addColorStop(1,'#8FCB6B');
-  ctx.fillStyle=g; ctx.fillRect(0,0,W,H);
+  // sky→battlefield (上方 2/3+ 畫面 = 戰場,天空/地面漸層,銜接城牆頂緣)
+  const g=ctx.createLinearGradient(0,0,0,WALL_TOP);
+  g.addColorStop(0,'#8FD8CF'); g.addColorStop(.45,'#BDE9D2'); g.addColorStop(.7,'#A8DA82'); g.addColorStop(1,'#8FCB6B');
+  ctx.fillStyle=g; ctx.fillRect(0,0,W,WALL_TOP);
   // clouds
   ctx.fillStyle='rgba(255,255,255,.75)';
   [[70,60,26],[290,44,20],[350,95,15]].forEach(([x,y,r],i)=>{
@@ -593,25 +606,23 @@ function draw(){
     ctx.beginPath(); ctx.arc(x+ox,y,r,0,7); ctx.arc(x+ox+r*.9,y+4,r*.75,0,7); ctx.arc(x+ox-r*.9,y+5,r*.7,0,7); ctx.fill();
   });
 
-  // path
-  ctx.strokeStyle='#EED9A4'; ctx.lineWidth=34; ctx.lineJoin='round'; ctx.lineCap='round';
-  ctx.beginPath(); ctx.moveTo(PATH[0].x,PATH[0].y);
-  for (const p of PATH.slice(1)) ctx.lineTo(p.x,p.y); ctx.stroke();
-  ctx.strokeStyle='rgba(0,0,0,.07)'; ctx.lineWidth=34; ctx.setLineDash([2,26]); ctx.stroke(); ctx.setLineDash([]);
+  // 城牆(雉堞造型):牆體矩形 + 垛口方塊
+  ctx.fillStyle='#C9B48B'; ctx.fillRect(0,WALL_TOP,W,WALL_BOTTOM-WALL_TOP);
+  ctx.fillStyle='rgba(0,0,0,.12)'; ctx.fillRect(0,WALL_TOP,W,6);
+  ctx.fillStyle='#B5A07A';
+  for (let mx=6; mx<W; mx+=40){ ctx.fillRect(mx,WALL_TOP-14,24,14); }
+  ctx.fillStyle='rgba(0,0,0,.08)';
+  for (let lx=0; lx<W; lx+=20){ ctx.fillRect(lx,WALL_TOP+22,1,WALL_BOTTOM-WALL_TOP-22); }
 
-  // castle
+  // 牆血條(牆帶正下方,綠色)
+  ctx.fillStyle='rgba(0,0,0,.28)'; rr(14,WALL_BOTTOM+1,W-28,7,3); ctx.fill();
+  ctx.fillStyle='#6FBF73'; rr(14,WALL_BOTTOM+1,(W-28)*Math.max(0,st.castle/st.castleMax),7,3); ctx.fill();
+
   ctx.textAlign='center'; ctx.textBaseline='middle';
-  ctx.font='54px serif'; ctx.fillText('🏰',CASTLE.x,CASTLE.y);
-  // castle hp pips
-  for (let i=0;i<st.castleMax;i++){
-    const px=CASTLE.x-(st.castleMax-1)*5.5+i*11;
-    ctx.fillStyle=i<st.castle?'#FF6B81':'rgba(0,0,0,.18)';
-    ctx.beginPath(); ctx.arc(px,CASTLE.y-46,4,0,7); ctx.fill();
-  }
-  // 已裝備寵物小圖示(寶庫裝備,開局注入)
+  // 已裝備寵物小圖示(寶庫裝備,開局注入),畫在牆旁
   if (st.pet){
     ctx.font='22px serif';
-    ctx.fillText(GEAR_TABLE.pet.species[st.pet.species].icon, CASTLE.x+36, CASTLE.y-6);
+    ctx.fillText(GEAR_TABLE.pet.species[st.pet.species].icon, PET_ICON.x, PET_ICON.y);
   }
 
   // slots & units
@@ -620,8 +631,6 @@ function draw(){
     rr(s.x-26,s.y-26,52,52,14); ctx.fill();
     if (st.sel===i){
       ctx.strokeStyle='#FF7B5C'; ctx.lineWidth=3; rr(s.x-28,s.y-28,56,56,15); ctx.stroke();
-      if (s.unit){ const T=TYPES[s.unit.type]; ctx.strokeStyle='rgba(255,123,92,.4)'; ctx.lineWidth=1.5;
-        ctx.beginPath(); ctx.arc(s.x,s.y,T.range,0,7); ctx.stroke(); }
     }
     const u=s.unit; if(!u) return;
     const T=TYPES[u.type];
