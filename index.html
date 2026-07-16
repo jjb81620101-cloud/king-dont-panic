@@ -94,14 +94,48 @@ const SLOTS = [
   {x:150,y:120},{x:215,y:158},{x:150,y:255},{x:250,y:290},
   {x:160,y:395},{x:255,y:365},{x:90,y:470},{x:280,y:510}
 ].map(p=>({...p,unit:null}));
+// 8 槽位鄰接表:依實際像素座標算兩兩距離,取 <=150 視為直接相鄰(對稱)。
+// 用於 😇 輔助光環判定「相鄰槽位」。
+const ADJ = [
+  [1,2],       // 0
+  [0,2,3],     // 1
+  [0,1,3,4],   // 2
+  [1,2,4,5],   // 3
+  [2,3,5,6],   // 4
+  [3,4,7],     // 5
+  [4],         // 6
+  [5]          // 7
+];
+function auraBuff(i){
+  let sum = 0;
+  for (const j of ADJ[i]){
+    const nb = SLOTS[j].unit;
+    if (nb && nb.type==='support') sum += (0.10+0.06*nb.lvl)*(nb.mul||1);
+  }
+  return sum;
+}
 
 /* ---------- unit types ---------- */
+// 新兵種傷害基準:以 🏹 同級同稀有度單發傷害(8)為 1.0 換算。
 const TYPES = {
-  archer:{ name:'弓手', face:'🏹', body:'#6FBF73', range:150, cd:.62, dmg:8,  proj:'#8BE28F', splash:0 },
-  mage:  { name:'法師', face:'🔮', body:'#7E8FE0', range:125, cd:1.5, dmg:15, proj:'#A9B7FF', splash:62 },
-  spark: { name:'雷球', face:'⚡', body:'#E8B33C', range:138, cd:1.05,dmg:9,  proj:'#FFE38A', splash:0, chain:3 }
+  archer: { name:'弓手', face:'🏹', body:'#6FBF73', range:150, cd:.62, dmg:8,     proj:'#8BE28F', splash:0 },
+  mage:   { name:'法師', face:'🔮', body:'#7E8FE0', range:125, cd:1.5, dmg:15,    proj:'#A9B7FF', splash:62 },
+  spark:  { name:'雷球', face:'⚡', body:'#E8B33C', range:138, cd:1.05,dmg:9,     proj:'#FFE38A', splash:0, chain:3 },
+  icemage:{ name:'冰法', face:'❄️', body:'#8FD3E8', range:150, cd:.62, dmg:8*.55, proj:'#CFF3FF', splash:0, slow:true },
+  poison: { name:'毒師', face:'☠️', body:'#9BCB6E', range:150, cd:.62, dmg:8*.35, proj:'#C7E36B', splash:0, poison:true },
+  support:{ name:'輔助', face:'😇', body:'#FFE9A8', range:0,   cd:0,   dmg:0,     proj:'#FFE9A8', splash:0, noAttack:true }
 };
 const TYPE_KEYS = Object.keys(TYPES);
+// 召喚池權重(公開機率):🏹22 🔮22 ⚡22 ❄️14 ☠️14 😇6
+const TYPE_POOL = [
+  {key:'archer', rate:22},
+  {key:'mage',   rate:22},
+  {key:'spark',  rate:22},
+  {key:'icemage',rate:14},
+  {key:'poison', rate:14},
+  {key:'support',rate:6}
+];
+function pickType(){ return weightedPick(TYPE_POOL).key; }
 const LVL_MUL = l => Math.pow(2.2, l-1);
 
 /* ---------- gacha rarity (teaching: rates + pity + power) ---------- */
@@ -136,7 +170,7 @@ function reset(){
     enemies:[], projs:[], floats:[], puffs:[],
     waveLeft:0, spawnT:0, betweenT:2, inWave:false,
     sel:-1, shake:0, pity:0,
-    buff:{ dmg:1, spd:1, coin:1 },
+    buff:{ dmg:1, spd:1, coin:1, frostCap:.55, frostBonus:0, poisonCapBonus:0, poisonDmgMul:1 },
     best: +(localStorage.getItem('kdp_best')||0)
   };
   SLOTS.forEach(s=>s.unit=null);
@@ -157,7 +191,8 @@ function spawnEnemy(){
   st.enemies.push({
     wp:0, x:PATH[0].x, y:PATH[0].y, hp, maxHp:hp,
     speed:(38 + Math.min(st.wave*1.2, 30)) * (boss?.6:1),
-    boss, wob:Math.random()*7, dead:false
+    boss, wob:Math.random()*7, dead:false,
+    slow:null, poison:[], poisonTickT:.5
   });
 }
 
@@ -173,7 +208,7 @@ function trySummon(){
   if (!empty.length) { floatTxt(W/2, H-135, '沒空位了,先合體!', '#FF7B5C', 15); beep(160,.15,'sawtooth'); return; }
   st.coins -= st.summonCost; st.summonCost += 2;
   const slot = empty[Math.floor(Math.random()*empty.length)];
-  const type = TYPE_KEYS[Math.floor(Math.random()*TYPE_KEYS.length)];
+  const type = pickType();
   const rar = rollRarity();
   slot.unit = { type, lvl:rar.startLvl, cd:0, pop:.45, star:rar.star, mul:rar.mul, rarCol:rar.col };
   puff(slot.x, slot.y, rar.col, rar.star>=3?12:7);
@@ -208,7 +243,9 @@ const TOTEMS = [
   {ic:'🪙', t:'豐收圖騰', d:'金幣獲得 +35%',   f:()=>st.buff.coin*=1.35},
   {ic:'🏰', t:'城牆圖騰', d:'城堡回復並上限 +3', f:()=>{st.castleMax+=3; st.castle=Math.min(st.castle+3,st.castleMax);}},
   {ic:'💥', t:'爆裂圖騰', d:'法師濺射範圍 +40%', f:()=>TYPES.mage.splash*=1.4},
-  {ic:'🎯', t:'鷹眼圖騰', d:'全體射程 +15%',   f:()=>TYPE_KEYS.forEach(k=>TYPES[k].range*=1.15)}
+  {ic:'🎯', t:'鷹眼圖騰', d:'全體射程 +15%',   f:()=>TYPE_KEYS.forEach(k=>TYPES[k].range*=1.15)},
+  {ic:'❄️', t:'寒霜圖騰', d:'冰法減速再 +10%,上限 70%', f:()=>{ st.buff.frostBonus+=0.10; st.buff.frostCap=0.70; }},
+  {ic:'☣️', t:'瘟疫圖騰', d:'中毒層數上限 +2,每層傷害 +25%', f:()=>{ st.buff.poisonCapBonus+=2; st.buff.poisonDmgMul*=1.25; }}
 ];
 function offerTotems(){
   st.mode='totem';
@@ -252,17 +289,36 @@ function update(dt){
       if (st.castle<=0) gameOver(); continue; }
     const d=Math.hypot(tgt.x-e.x,tgt.y-e.y);
     if (d<3){ e.wp++; continue; }
-    e.x+=(tgt.x-e.x)/d*e.speed*dt; e.y+=(tgt.y-e.y)/d*e.speed*dt;
+    const slowMul = (e.slow && st.t<e.slow.until) ? (1-e.slow.frac) : 1;
+    e.x+=(tgt.x-e.x)/d*e.speed*slowMul*dt; e.y+=(tgt.y-e.y)/d*e.speed*slowMul*dt;
+  }
+  st.enemies=st.enemies.filter(e=>!e.dead);
+
+  // status effects: 毒 tick(每 0.5 秒結算一次,滿層時最舊一層已在 applyPoison 換掉)
+  for (const e of st.enemies){
+    if (e.poison && e.poison.length){
+      e.poison = e.poison.filter(l=>l.until>st.t);
+      if (e.poison.length){
+        e.poisonTickT -= dt;
+        if (e.poisonTickT<=0){
+          e.poisonTickT += .5;
+          const total = e.poison.reduce((a,l)=>a+l.dps,0);
+          damage(e, total*.5);
+        }
+      }
+    }
   }
   st.enemies=st.enemies.filter(e=>!e.dead);
 
   // units fire
-  for (const s of SLOTS){
+  for (let si=0; si<SLOTS.length; si++){
+    const s=SLOTS[si];
     const u=s.unit; if(!u) continue;
     u.pop=Math.max(0,u.pop-dt*2);
+    const T=TYPES[u.type];
+    if (T.noAttack) continue; // 😇 輔助:不攻擊,只提供相鄰光環
     u.cd-=dt*st.buff.spd;
     if (u.cd>0) continue;
-    const T=TYPES[u.type];
     let best=null,bd=1e9;
     for (const e of st.enemies){ const d=dist(s,e); if (d<=T.range && e.wp*1000+d < bd){ bd=e.wp*1000+d; best=e; } }
     // 前面的優先:用 wp 排序過的 bd。改成最靠近城堡優先:
@@ -270,10 +326,11 @@ function update(dt){
     for (const e of st.enemies){ const d=dist(s,e); if (d<=T.range){ const prog=e.wp*1000-Math.hypot(PATH[e.wp+1]?PATH[e.wp+1].x-e.x:0,PATH[e.wp+1]?PATH[e.wp+1].y-e.y:0); if(prog>bw){bw=prog;best=e;} } }
     if (!best) continue;
     u.cd=T.cd;
-    // 傷害公式:基礎 × 等級成長 × 星級倍率 × 圖騰buff(教學:稀有度直接進乘法)
-    const dmg = T.dmg * LVL_MUL(u.lvl) * (u.mul||1) * st.buff.dmg;
-    st.projs.push({x:s.x,y:s.y-14,tgt:best,type:u.type,dmg,speed:430});
-    beep(u.type==='archer'?900:u.type==='mage'?300:660,.05,u.type==='mage'?'sine':'square',.02);
+    // 傷害公式:基礎 × 等級成長 × 星級倍率 × 圖騰buff × (1+相鄰😇輔助光環)
+    const aura = auraBuff(si);
+    const dmg = T.dmg * LVL_MUL(u.lvl) * (u.mul||1) * st.buff.dmg * (1+aura);
+    st.projs.push({x:s.x,y:s.y-14,tgt:best,type:u.type,dmg,speed:430,lvl:u.lvl});
+    beep(u.type==='archer'?900:u.type==='mage'?300:u.type==='icemage'?520:u.type==='poison'?260:660,.05,u.type==='mage'?'sine':'square',.02);
   }
 
   // projectiles
@@ -302,6 +359,30 @@ function hit(p){
       for (const e of st.enemies){ if(!hitset.has(e)&&!e.dead){ const d=Math.hypot(e.x-src.x,e.y-src.y); if(d<nd){nd=d;nx=e;} } }
       if(!nx)break; damage(nx,dmg); hitset.add(nx); st.puffs.push({x:(src.x+nx.x)/2,y:(src.y+nx.y)/2,vx:0,vy:0,t:.35,col:'#FFE38A'}); src=nx; dmg*=.65; }
   }
+  if (T.slow && !p.tgt.dead) applySlow(p.tgt, p.lvl);
+  if (T.poison && !p.tgt.dead) applyPoison(p.tgt, p.dmg);
+}
+// ❄️ 冰法減速:命中刷新持續時間、同不疊加取最強;Boss 減速減半;寒霜圖騰可拉高上限與加成
+function applySlow(e, lvl){
+  let frac = Math.min(st.buff.frostCap, 0.20+0.05*lvl+st.buff.frostBonus);
+  if (e.boss) frac *= 0.5;
+  const active = e.slow && st.t < e.slow.until;
+  const newFrac = active ? Math.max(e.slow.frac, frac) : frac;
+  e.slow = { frac:newFrac, until:st.t+1.5 };
+}
+// ☠️ 毒師疊毒:每層 3 秒,單一敵人上限 5 層(瘟疫圖騰 +2),滿層時刷新最舊一層
+function applyPoison(e, hitDmg){
+  const cap = 5 + (st.buff.poisonCapBonus||0);
+  e.poison = (e.poison||[]).filter(l=>l.until>st.t);
+  const layer = { dps: hitDmg*0.6*(st.buff.poisonDmgMul||1), until: st.t+3 };
+  if (e.poison.length>=cap){
+    let oldestIdx=0, oldestUntil=e.poison[0].until;
+    for (let k=1;k<e.poison.length;k++){ if (e.poison[k].until<oldestUntil){ oldestUntil=e.poison[k].until; oldestIdx=k; } }
+    e.poison[oldestIdx]=layer;
+  } else {
+    e.poison.push(layer);
+  }
+  if (e.poisonTickT===undefined) e.poisonTickT=.5;
 }
 function damage(e,d){
   e.hp-=d;
@@ -369,6 +450,11 @@ function draw(){
     const u=s.unit; if(!u) return;
     const T=TYPES[u.type];
     const wob=Math.sin(st.t*3+i)*2, pop=1+u.pop*.5;
+    // 😇 輔助光環:被 buff 槽位淡金色光暈
+    if (auraBuff(i)>0){
+      ctx.save(); ctx.globalAlpha=.4; ctx.fillStyle='#FFE9A8';
+      ctx.beginPath(); ctx.ellipse(s.x,s.y+4,26*pop,24*pop,0,0,7); ctx.fill(); ctx.restore();
+    }
     // rarity ring
     if (u.star>=3){ ctx.strokeStyle=u.rarCol; ctx.lineWidth=2.5;
       ctx.beginPath(); ctx.ellipse(s.x,s.y+4,21*pop,19*pop,0,0,7); ctx.stroke(); }
@@ -391,10 +477,20 @@ function draw(){
   // enemies
   for (const e of st.enemies){
     const r=e.boss?26:14, wob=Math.sin(st.t*7+e.wob)*2.4;
+    const slowed = e.slow && st.t<e.slow.until;
+    const poisoned = e.poison && e.poison.length;
     ctx.fillStyle='rgba(0,0,0,.12)';
     ctx.beginPath(); ctx.ellipse(e.x,e.y+r*.85,r*.8,r*.3,0,0,7); ctx.fill();
+    // ❄️ 減速淡藍色調
+    if (slowed){ ctx.save(); ctx.globalAlpha=.38; ctx.fillStyle='#8FD3E8';
+      ctx.beginPath(); ctx.arc(e.x,e.y,r*1.15,0,7); ctx.fill(); ctx.restore(); }
+    // ☠️ 中毒綠色調
+    if (poisoned){ ctx.save(); ctx.globalAlpha=.32; ctx.fillStyle='#6FBF73';
+      ctx.beginPath(); ctx.arc(e.x,e.y,r*1.02,0,7); ctx.fill(); ctx.restore(); }
     ctx.font=(e.boss?46:26)+'px serif';
     ctx.fillText(e.boss?'👹':'👺',e.x,e.y+wob);
+    if (slowed){ ctx.font='13px sans-serif'; ctx.fillText('❄',e.x+r*.75,e.y-r*.6); }
+    if (poisoned){ ctx.fillStyle='#1F3D33'; ctx.font='bold 10px sans-serif'; ctx.fillText(''+e.poison.length,e.x-r*.75,e.y-r*.6); }
     // hp bar
     const bw=e.boss?46:26;
     ctx.fillStyle='rgba(0,0,0,.25)'; rr(e.x-bw/2,e.y-(e.boss?36:24),bw,4.5,2); ctx.fill();
@@ -449,7 +545,9 @@ function drawHud(){
   ctx.fillStyle='#FFC94D'; ctx.fillText('SSR 2%',352,H-66);
   ctx.fillStyle='rgba(255,249,234,.92)'; ctx.font='12px sans-serif';
   ctx.fillText('保底:'+(PITY-st.pity)+' 抽內必出 SR＋', 196, H-46);
-  ctx.fillText('同類同級合體｜🏹快攻 🔮濺射 ⚡連鎖', 196, H-28);
+  // 兵種召喚池機率(公開):🏹22 🔮22 ⚡22 ❄️14 ☠️14 😇6
+  ctx.font='10px sans-serif';
+  ctx.fillText('🏹22 🔮22 ⚡22 ❄️14 ☠️14 😇6', 196, H-28);
   ctx.textAlign='center';
 }
 
