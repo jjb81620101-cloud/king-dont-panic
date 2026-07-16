@@ -41,6 +41,16 @@
   .totem small{display:block;font-weight:400;font-size:12.5px;opacity:.75;margin-top:2px}
   .score{font-size:20px;line-height:2}
   .score b{color:var(--gold);font-size:34px}
+  .btn.ghost{background:var(--pine2);box-shadow:0 5px 0 #16281f;font-size:15px;padding:11px 30px}
+  .btn.ghost:active{box-shadow:0 2px 0 #16281f}
+  .vaultRow{display:flex;flex-direction:column;gap:10px;width:100%;max-width:300px}
+  .gearCard{font-family:inherit;background:var(--card);color:var(--ink);border-radius:16px;
+    padding:11px 16px;font-size:14px;font-weight:700;box-shadow:0 4px 0 #C9B47E;
+    display:flex;align-items:center;gap:12px;text-align:left}
+  .gearCard .ic{font-size:24px}
+  .gearCard small{display:block;font-weight:400;font-size:12px;opacity:.75;margin-top:2px}
+  .vaultMsg{min-height:20px;font-size:13px;color:var(--gold)}
+  .chapterList{font-size:13px;opacity:.88;max-width:300px;line-height:1.7}
 </style>
 
 <div id="wrap">
@@ -53,6 +63,17 @@
       🤝 點兩隻「同類同等級」合體升級<br>
       🏰 撐越多波越厲害</div>
     <button class="btn" id="startBtn">開 始</button>
+    <button class="btn ghost" id="vaultBtn">💎 寶庫</button>
+  </div>
+
+  <div id="vaultBox" class="overlay hidden">
+    <div class="title" style="font-size:30px">💎 寶庫</div>
+    <div class="sub" id="vaultDiamonds" style="margin-top:-8px">鑽石:0</div>
+    <div class="vaultRow" id="vaultGearRow"></div>
+    <button class="btn" id="vaultDrawBtn">單抽 20💎</button>
+    <div class="sub" id="vaultRates" style="font-size:12px;opacity:.8"></div>
+    <div class="vaultMsg" id="vaultMsg"></div>
+    <button class="btn ghost" id="vaultCloseBtn">返回</button>
   </div>
 
   <div id="totemBox" class="overlay hidden">
@@ -64,6 +85,7 @@
   <div id="over" class="overlay hidden">
     <div class="title" style="font-size:36px">城堡淪陷…</div>
     <div class="score">你守住了 <b id="finalWave">0</b> 波<br><span id="bestLine" style="font-size:14px;opacity:.85"></span></div>
+    <div class="chapterList" id="chapterList"></div>
     <button class="btn" id="againBtn">再來一場</button>
   </div>
 </div>
@@ -153,29 +175,163 @@ function weightedPick(pool){
   for (const x of pool){ if ((r-=x.rate)<=0) return x; }
   return pool[pool.length-1];
 }
-function rollRarity(){
-  st.pity++;
-  const forced = st.pity>=PITY;                       // 保底觸發
+// 通用保底抽取:holder[key] 累計未出 SR+ 的抽數,達 PITY 強制 SR+,出 SR+ 即歸零。
+// 局內兵種召喚(st.pity)與局外裝備抽卡(vault.gearPity)共用同一套規則。
+function rollRarityGeneric(holder, key){
+  holder[key] = (holder[key]||0) + 1;
+  const forced = holder[key] >= PITY;
   const pool = forced ? RARITY.filter(x=>x.star>=3) : RARITY;
   const r = weightedPick(pool);
-  if (r.star>=3) st.pity = 0;                          // 出 SR+ 重置保底計數
+  if (r.star>=3) holder[key] = 0;
   return r;
+}
+function rollRarity(){ return rollRarityGeneric(st, 'pity'); }
+
+/* ---------- vault (局外裝備抽卡 / 局外貨幣) ---------- */
+// 裝備數值表:索引 0-3 對應稀有度 N/R/SR/SSR(star-1)
+const GEAR_TABLE = {
+  weapon: { icon:'⚔️', name:'武器', desc:'全隊傷害', values:[0.03,0.06,0.10,0.16] },
+  charm:  { icon:'🛡️', name:'護符', desc:'城堡上限血', values:[1,2,3,5] },
+  pet: { icon:'🐾', name:'寵物', species:{
+    cat:  { icon:'🐱', name:'橘貓', desc:'殺敵金',   values:[0.06,0.10,0.16,0.25] },
+    fox:  { icon:'🦊', name:'冰狐', desc:'減速加成', values:[0.03,0.05,0.08,0.12] },
+    frog: { icon:'🐸', name:'毒蛙', desc:'毒傷加成', values:[0.08,0.12,0.20,0.30] }
+  }}
+};
+const GEAR_CATS = ['weapon','charm','pet'];
+const PET_SPECIES = ['cat','fox','frog'];
+const GEAR_DRAW_COST = 20, GEAR_DISASSEMBLE_REFUND = 10, VAULT_FIRST_VISIT_BONUS = 60;
+const VAULT_KEY = 'kdp_vault';
+function loadVault(){
+  let v = null;
+  try{ v = JSON.parse(localStorage.getItem(VAULT_KEY)||'null'); }catch(e){ v = null; }
+  if (!v || typeof v!=='object') v = {};
+  if (typeof v.diamonds!=='number') v.diamonds = 0;
+  if (!v.gear) v.gear = { weapon:null, charm:null, pet:null };
+  if (!v.pullCounts) v.pullCounts = { N:0, R:0, SR:0, SSR:0 };
+  if (typeof v.gearPity!=='number') v.gearPity = 0;
+  if (typeof v.firstVisit!=='boolean') v.firstVisit = false;
+  return v;
+}
+function saveVault(){ localStorage.setItem(VAULT_KEY, JSON.stringify(vault)); }
+let vault = loadVault();
+// 「取最強」比較:星級優先,同星比數值(同欄位內部比較,pet 跨物種比較以數值當戰力代理)
+function isGearStronger(a, b){
+  if (!b) return true;
+  if (a.star !== b.star) return a.star > b.star;
+  return a.value > b.value;
+}
+function gearItemLabel(it){
+  const nm = it.cat==='pet' ? GEAR_TABLE.pet.species[it.species].name : GEAR_TABLE[it.cat].name;
+  const ic = it.cat==='pet' ? GEAR_TABLE.pet.species[it.species].icon : GEAR_TABLE[it.cat].icon;
+  return ic+nm+' '+it.rarity;
+}
+function gachaGear(){
+  if (vault.diamonds < GEAR_DRAW_COST){ vaultMsg('鑽石不夠!(需 '+GEAR_DRAW_COST+'💎)'); beep(160,.15,'sawtooth'); return; }
+  vault.diamonds -= GEAR_DRAW_COST;
+  const r = rollRarityGeneric(vault, 'gearPity');
+  vault.pullCounts[r.key] = (vault.pullCounts[r.key]||0) + 1;
+  const idx = r.star - 1;
+  const cat = GEAR_CATS[Math.floor(Math.random()*GEAR_CATS.length)];
+  let item;
+  if (cat==='pet'){
+    const sp = PET_SPECIES[Math.floor(Math.random()*PET_SPECIES.length)];
+    item = { cat:'pet', species:sp, rarity:r.key, star:r.star, value:GEAR_TABLE.pet.species[sp].values[idx] };
+  } else {
+    item = { cat, rarity:r.key, star:r.star, value:GEAR_TABLE[cat].values[idx] };
+  }
+  const old = vault.gear[cat];
+  let msg;
+  if (isGearStronger(item, old)){
+    vault.gear[cat] = item;
+    if (old){ vault.diamonds += GEAR_DISASSEMBLE_REFUND; msg = '獲得 '+gearItemLabel(item)+'!舊裝備分解 +'+GEAR_DISASSEMBLE_REFUND+'💎'; }
+    else msg = '獲得 '+gearItemLabel(item)+'!已裝備';
+  } else {
+    vault.diamonds += GEAR_DISASSEMBLE_REFUND;
+    msg = '獲得 '+gearItemLabel(item)+',較弱,已分解 +'+GEAR_DISASSEMBLE_REFUND+'💎';
+  }
+  saveVault();
+  vaultMsg(msg);
+  renderVault();
+  beep(r.star>=3?720:520, r.star>=3?.2:.12, 'triangle', .05, r.star>=3?1080:780);
+}
+function vaultMsg(t){ const el=document.getElementById('vaultMsg'); if (el) el.textContent = t; }
+function renderVault(){
+  const dEl = document.getElementById('vaultDiamonds'); if (dEl) dEl.textContent = '💎 鑽石:'+vault.diamonds;
+  const row = document.getElementById('vaultGearRow');
+  if (row){
+    row.innerHTML = '';
+    GEAR_CATS.forEach(cat=>{
+      const it = vault.gear[cat];
+      const label = cat==='pet' ? '寵物' : GEAR_TABLE[cat].name;
+      const icon = cat==='pet' ? (it?GEAR_TABLE.pet.species[it.species].icon:'🐾') : GEAR_TABLE[cat].icon;
+      let desc;
+      if (!it) desc = '尚未持有';
+      else if (cat==='weapon') desc = it.rarity+' 全隊傷害 +'+Math.round(it.value*100)+'%';
+      else if (cat==='charm') desc = it.rarity+' 城堡上限 +'+it.value;
+      else desc = it.rarity+' '+GEAR_TABLE.pet.species[it.species].name+' '+GEAR_TABLE.pet.species[it.species].desc+' +'+Math.round(it.value*100)+'%';
+      const div = document.createElement('div'); div.className = 'gearCard';
+      div.innerHTML = '<span class="ic">'+icon+'</span><span>'+label+'<small>'+desc+'</small></span>';
+      row.appendChild(div);
+    });
+  }
+  const ratesEl = document.getElementById('vaultRates');
+  if (ratesEl) ratesEl.textContent = 'N70% R22% SR6% SSR2% ・ 保底:'+(PITY-vault.gearPity)+' 抽內必出 SR+';
 }
 
 /* ---------- state ---------- */
 let st;
 function reset(){
+  // 局外裝備效果(寶庫)於開局注入:護符加城堡上限、武器加傷害乘數、寵物加對應特效
+  const gWeapon = vault.gear.weapon, gCharm = vault.gear.charm, gPet = vault.gear.pet;
+  const castleMax0 = 10 + (gCharm ? gCharm.value : 0);
   st = {
-    mode:'menu', t:0, wave:0, castle:10, castleMax:10, coins:30, summonCost:10,
+    mode:'menu', t:0, wave:0, castle:castleMax0, castleMax:castleMax0, coins:30, summonCost:10,
     enemies:[], projs:[], floats:[], puffs:[],
     waveLeft:0, spawnT:0, betweenT:2, inWave:false,
     sel:-1, shake:0, pity:0,
-    buff:{ dmg:1, spd:1, coin:1, frostCap:.55, frostBonus:0, poisonCapBonus:0, poisonDmgMul:1 },
+    buff:{ dmg:1, spd:1, coin:1, frostCap:.55, frostBonus:0, poisonCapBonus:0, poisonDmgMul:1,
+           gearDmg: gWeapon ? (1+gWeapon.value) : 1, gearCoin: (gPet && gPet.species==='cat') ? (1+gPet.value) : 1 },
+    diversity:{ count:0, bonus:0 },
+    chapterLog:[], chapterBanner:null,
+    pet: gPet || null,
     best: +(localStorage.getItem('kdp_best')||0)
   };
+  if (gPet && gPet.species==='fox') st.buff.frostBonus += gPet.value;
+  if (gPet && gPet.species==='frog') st.buff.poisonDmgMul *= (1+gPet.value);
   SLOTS.forEach(s=>s.unit=null);
 }
 reset();
+
+/* ---------- diversity bonus (職業羈絆) ---------- */
+// 場上不同兵種種類數(support 算一種):>=4 種 +10% 傷害,6 種全滿 +20%(取高不疊加)
+function computeDiversity(){
+  const types = new Set();
+  SLOTS.forEach(s=>{ if (s.unit) types.add(s.unit.type); });
+  const count = types.size;
+  let bonus = 0;
+  if (count>=6) bonus = 0.20; else if (count>=4) bonus = 0.10;
+  return { count, bonus };
+}
+
+/* ---------- chapter rating (章節評級結算) ---------- */
+// 每 10 波依「當下城堡血量」評級,結算鑽石直接存入寶庫(vault),並記錄供 game over 顯示
+const CHAPTER_DIAMONDS = { S:30, A:20, B:12, C:8 };
+function chapterRating(hp){
+  if (hp>=9) return 'S';
+  if (hp>=7) return 'A';
+  if (hp>=4) return 'B';
+  return 'C';
+}
+function settleChapter(){
+  const chapter = st.wave/10;
+  const rating = chapterRating(st.castle);
+  const reward = CHAPTER_DIAMONDS[rating];
+  st.chapterLog.push({ chapter, rating, castle:st.castle, reward });
+  vault.diamonds += reward; saveVault();
+  st.chapterBanner = { text:'📖 第'+chapter+'章 評級 '+rating+'  +'+reward+'💎', t:0 };
+  beep(rating==='S'?880:rating==='A'?700:rating==='B'?560:420, .3, 'triangle', .06, rating==='S'?1200:900);
+}
 
 /* ---------- waves ---------- */
 function waveHp(w){ return 8*Math.pow(1.33,w); }
@@ -263,7 +419,10 @@ function offerTotems(){
 /* ---------- update ---------- */
 function update(dt){
   st.t += dt;
+  // 章節橫幅計時獨立於 mode,即使圖騰選單蓋在上面也持續倒數,不卡住下一步流程
+  if (st.chapterBanner){ st.chapterBanner.t += dt; if (st.chapterBanner.t>2) st.chapterBanner=null; }
   if (st.mode!=='play') return;
+  st.diversity = computeDiversity();
 
   // wave flow
   if (st.inWave){
@@ -276,6 +435,7 @@ function update(dt){
       st.coins+=bonus; floatTxt(W/2,300,'波次獎勵 +'+bonus+' 💰','#FFC94D',17);
       beep(560,.2,'triangle',.05,840);
       if (st.wave%5===0) offerTotems();
+      if (st.wave%10===0) settleChapter();
     }
   } else {
     st.betweenT-=dt;
@@ -326,9 +486,9 @@ function update(dt){
     for (const e of st.enemies){ const d=dist(s,e); if (d<=T.range){ const prog=e.wp*1000-Math.hypot(PATH[e.wp+1]?PATH[e.wp+1].x-e.x:0,PATH[e.wp+1]?PATH[e.wp+1].y-e.y:0); if(prog>bw){bw=prog;best=e;} } }
     if (!best) continue;
     u.cd=T.cd;
-    // 傷害公式:基礎 × 等級成長 × 星級倍率 × 圖騰buff × (1+相鄰😇輔助光環)
+    // 傷害公式:基礎 × 等級成長 × 星級倍率 × 圖騰buff × 裝備武器buff × (1+相鄰😇輔助光環) × (1+職業羈絆加成)
     const aura = auraBuff(si);
-    const dmg = T.dmg * LVL_MUL(u.lvl) * (u.mul||1) * st.buff.dmg * (1+aura);
+    const dmg = T.dmg * LVL_MUL(u.lvl) * (u.mul||1) * st.buff.dmg * st.buff.gearDmg * (1+aura) * (1+st.diversity.bonus);
     st.projs.push({x:s.x,y:s.y-14,tgt:best,type:u.type,dmg,speed:430,lvl:u.lvl});
     beep(u.type==='archer'?900:u.type==='mage'?300:u.type==='icemage'?520:u.type==='poison'?260:660,.05,u.type==='mage'?'sine':'square',.02);
   }
@@ -365,6 +525,7 @@ function hit(p){
 // ❄️ 冰法減速:命中刷新持續時間、同不疊加取最強;Boss 減速減半;寒霜圖騰可拉高上限與加成
 function applySlow(e, lvl){
   let frac = Math.min(st.buff.frostCap, 0.20+0.05*lvl+st.buff.frostBonus);
+  frac = Math.min(frac, 0.70); // 絕對上限:即使寒霜圖騰+冰狐寵物疊加,總減速仍不超過 70%
   if (e.boss) frac *= 0.5;
   const active = e.slow && st.t < e.slow.until;
   const newFrac = active ? Math.max(e.slow.frac, frac) : frac;
@@ -389,7 +550,7 @@ function damage(e,d){
   floatTxt(e.x+(Math.random()*16-8), e.y-22, Math.round(d), '#FFF3D6', e.boss?15:12);
   if (e.hp<=0 && !e.dead){
     e.dead=true;
-    const c=Math.round((2+st.wave*.6)*(e.boss?10:1)*st.buff.coin);
+    const c=Math.round((2+st.wave*.6)*(e.boss?10:1)*st.buff.coin*st.buff.gearCoin);
     st.coins+=c;
     floatTxt(e.x,e.y-8,'+'+c+'💰','#FFC94D',e.boss?18:13);
     puff(e.x,e.y,e.boss?'#FF9C6B':'#B7E3A1',e.boss?18:8);
@@ -399,8 +560,18 @@ function damage(e,d){
 function gameOver(){
   st.mode='over';
   if (st.wave>st.best){ st.best=st.wave; localStorage.setItem('kdp_best',st.best); }
+  // game over 額外結算:鑽石 += floor(存活波數 × 1.5),直接存入寶庫
+  const waveBonus = Math.floor(st.wave*1.5);
+  vault.diamonds += waveBonus; saveVault();
   document.getElementById('finalWave').textContent=st.wave;
   document.getElementById('bestLine').textContent='最佳紀錄:'+st.best+' 波';
+  const listEl = document.getElementById('chapterList');
+  if (listEl){
+    let html = st.chapterLog.map(c=>'第'+c.chapter+'章:評級 '+c.rating+'(城堡血'+c.castle+')+'+c.reward+'💎').join('<br>');
+    if (html) html += '<br>';
+    html += '存活獎勵 +'+waveBonus+'💎 ・ 目前鑽石 💎'+vault.diamonds;
+    listEl.innerHTML = html;
+  }
   document.getElementById('over').classList.remove('hidden');
 }
 
@@ -436,6 +607,11 @@ function draw(){
     const px=CASTLE.x-(st.castleMax-1)*5.5+i*11;
     ctx.fillStyle=i<st.castle?'#FF6B81':'rgba(0,0,0,.18)';
     ctx.beginPath(); ctx.arc(px,CASTLE.y-46,4,0,7); ctx.fill();
+  }
+  // 已裝備寵物小圖示(寶庫裝備,開局注入)
+  if (st.pet){
+    ctx.font='22px serif';
+    ctx.fillText(GEAR_TABLE.pet.species[st.pet.species].icon, CASTLE.x+36, CASTLE.y-6);
   }
 
   // slots & units
@@ -516,6 +692,19 @@ function draw(){
   }
 
   drawHud();
+
+  // 章節結算橫幅(2 秒淡出,不暫停遊戲)
+  if (st.chapterBanner){
+    const b=st.chapterBanner;
+    const alpha = b.t<1.6 ? 1 : Math.max(0,1-(b.t-1.6)/0.4);
+    ctx.save(); ctx.globalAlpha=alpha;
+    ctx.font='bold 15px sans-serif';
+    const tw=ctx.measureText(b.text).width;
+    ctx.fillStyle='rgba(255,201,77,.95)'; rr(W/2-tw/2-16,84,tw+32,38,14); ctx.fill();
+    ctx.fillStyle='#2E5648'; ctx.textAlign='center'; ctx.fillText(b.text,W/2,84+23);
+    ctx.restore();
+  }
+
   ctx.restore();
 }
 
@@ -528,6 +717,15 @@ function drawHud(){
   ctx.textAlign='right';
   ctx.fillStyle='#FFC94D'; ctx.fillText('💰 '+st.coins, W-24, 32);
   ctx.textAlign='center';
+
+  // 職業羈絆徽章:場上兵種種類達門檻才顯示
+  if (st.diversity && st.diversity.bonus>0){
+    const label = '🔗羈絆×'+st.diversity.count+' +'+Math.round(st.diversity.bonus*100)+'%';
+    ctx.font='bold 12.5px sans-serif';
+    const tw=ctx.measureText(label).width;
+    ctx.fillStyle='rgba(111,191,115,.92)'; rr(W/2-tw/2-12,60,tw+24,24,12); ctx.fill();
+    ctx.fillStyle='#fff'; ctx.fillText(label, W/2, 60+15);
+  }
 
   // bottom bar
   ctx.fillStyle='rgba(31,61,51,.85)'; rr(10,H-92,W-20,82,18); ctx.fill();
@@ -576,6 +774,21 @@ document.getElementById('againBtn').onclick=()=>{
   document.getElementById('over').classList.add('hidden');
   reset(); st.mode='play';
 };
+document.getElementById('vaultBtn').onclick=()=>{
+  document.getElementById('menu').classList.add('hidden');
+  if (!vault.firstVisit){
+    vault.firstVisit = true; vault.diamonds += VAULT_FIRST_VISIT_BONUS; saveVault();
+    vaultMsg('首次進入寶庫,贈送 '+VAULT_FIRST_VISIT_BONUS+'💎!');
+  } else vaultMsg('');
+  renderVault();
+  document.getElementById('vaultBox').classList.remove('hidden');
+  beep(700,.14,'triangle',.06,1000);
+};
+document.getElementById('vaultCloseBtn').onclick=()=>{
+  document.getElementById('vaultBox').classList.add('hidden');
+  document.getElementById('menu').classList.remove('hidden');
+};
+document.getElementById('vaultDrawBtn').onclick=()=>gachaGear();
 
 /* ---------- loop ---------- */
 let last=performance.now();
