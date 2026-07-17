@@ -865,7 +865,12 @@ function draw(){
     if (st.sel===i){
       ctx.strokeStyle='#FF7B5C'; ctx.lineWidth=3; rr(s.x-box/2-2,s.y-box/2-2,box+4,box+4,15*bf); ctx.stroke();
     }
-    const u=s.unit; if(!u) return;
+  });
+  // 單位分層:第二排先畫、第一排後畫(第一排是前景),避免石台/上排單位蓋住下排貓
+  const unitOrder=[...SLOTS.keys()].sort((a,b)=>(SLOTS[a].row===2?0:1)-(SLOTS[b].row===2?0:1));
+  for (const i of unitOrder){
+    const s=SLOTS[i];
+    const u=s.unit; if(!u) continue;
     const T=TYPES[u.type];
     const wob=Math.sin(st.t*3+i)*2, pop=1+u.pop*.5;
     // 😇/🎵 輔助光環:被 buff 槽位淡金色光暈
@@ -900,7 +905,7 @@ function draw(){
     const bx = Math.min(s.x+8, W-24);
     ctx.fillStyle='#2E5648'; rr(bx,s.y+10,22,15,7); ctx.fill();
     ctx.fillStyle='#FFC94D'; ctx.font='bold 10.5px sans-serif'; ctx.fillText('Lv'+u.lvl,bx+11,s.y+18);
-  });
+  }
 
   // enemies
   for (const e of st.enemies){
