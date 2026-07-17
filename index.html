@@ -1,6 +1,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <title>國王別慌!小島守城</title>
+<link rel="icon" href="data:,">
 <style>
   :root{
     --sky:#8FD8CF; --sky2:#BDE9D2; --pine:#2E5648; --pine2:#1F3D33;
@@ -104,6 +105,37 @@
   .petRarRow .prog i{display:block;height:100%}
   .petRarRow .amt{width:44px;text-align:right}
   .craftBtn{font-family:inherit;font-size:10.5px;font-weight:700;background:var(--coral);color:#fff;border:none;border-radius:8px;padding:3px 7px;cursor:pointer}
+
+  /* ---- P3-S2 UI:裝備七部位格網+詳情卡、寵物雙欄 ---- */
+  .equipGrid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;width:100%}
+  .equipCell{background:var(--card);color:var(--ink);border-radius:12px;padding:7px 4px;text-align:center;cursor:pointer;
+    box-shadow:0 0 0 2px #AEB9C4;min-height:78px;box-sizing:border-box;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px}
+  .equipCell.sel{box-shadow:0 0 0 3px var(--gold)}
+  .equipCell.empty{opacity:.55;box-shadow:none;border:2px dashed rgba(255,255,255,.45);background:rgba(255,255,255,.08);color:var(--card)}
+  .equipCell .ic{font-size:22px;line-height:1.1}
+  .equipCell .nm{font-size:10.5px;font-weight:700;margin-top:1px}
+  .equipCell .lv{font-size:9px;opacity:.85}
+  .equipCell .afx{font-size:8.5px;color:var(--coral);font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+  .equipCell.rar-N{box-shadow:0 0 0 2px #AEB9C4}
+  .equipCell.rar-R{box-shadow:0 0 0 2px #6FBF73}
+  .equipCell.rar-SR{box-shadow:0 0 0 2px #7E8FE0}
+  .equipCell.rar-SSR{box-shadow:0 0 0 2px #FFC94D}
+  .equipDetail{width:100%;background:var(--card);color:var(--ink);border-radius:14px;padding:10px 13px;text-align:left;font-size:12.5px;line-height:1.6;box-sizing:border-box}
+  .equipDetail .dTitle{font-weight:800;font-size:14.5px;margin-bottom:2px}
+  .equipDetail .dBtns{display:flex;gap:8px;margin-top:7px}
+  .eqBtn{font-family:inherit;font-size:11.5px;font-weight:700;color:#fff;background:var(--coral);border:none;border-radius:8px;padding:7px 9px;cursor:pointer;flex:1}
+  .eqBtn.reroll{background:#7E8FE0}
+  .eqBtn.disabled{background:#AEB9C4;color:#eee;cursor:default;opacity:.7;pointer-events:none}
+  .petSlotsRow{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;width:100%}
+  .petSlotCard{background:var(--card);color:var(--ink);border-radius:12px;padding:8px;text-align:center;cursor:pointer;
+    box-shadow:0 0 0 2px #AEB9C4;min-height:64px;box-sizing:border-box;display:flex;flex-direction:column;align-items:center;justify-content:center}
+  .petSlotCard.empty{opacity:.55;box-shadow:none;border:2px dashed rgba(255,255,255,.45);background:rgba(255,255,255,.08);color:var(--card)}
+  .petSlotCard .ic{font-size:26px}
+  .petSlotCard .nm{font-size:11.5px;font-weight:800;margin-top:2px}
+  .petSlotCard .rk{font-size:10px;opacity:.85}
+  .petPicker{width:100%;background:var(--card);color:var(--ink);border-radius:12px;padding:8px 10px;display:flex;flex-direction:column;gap:6px;box-sizing:border-box}
+  .petPicker .opt{font-family:inherit;font-size:11.5px;font-weight:700;background:rgba(0,0,0,.06);border:none;border-radius:8px;padding:7px 9px;cursor:pointer;text-align:left}
+  .petPicker .opt.clearOpt{color:var(--coral)}
 </style>
 
 <div id="wrap">
@@ -148,10 +180,13 @@
       <div class="charGrid" id="charGrid"></div>
     </div>
     <div class="vaultPane hidden" id="vaultPanePet">
+      <div class="petSlotsRow" id="petSlotsRow"></div>
+      <div id="petPickerBox"></div>
       <div class="petList" id="petList"></div>
     </div>
     <div class="vaultPane hidden" id="vaultPaneEquip">
-      <div class="vaultRow" id="vaultGearRow"></div>
+      <div class="equipGrid" id="equipGrid"></div>
+      <div id="equipDetail"></div>
     </div>
     <div class="vaultMsg" id="vaultMsg"></div>
     <button class="btn ghost" id="vaultCloseBtn">返回</button>
@@ -181,7 +216,7 @@
 
   <div id="deckBox" class="overlay hidden">
     <div class="title" style="font-size:28px">⚔️ 編隊</div>
-    <div class="sub" style="margin-top:-8px">選 6 隻上陣,決定召喚池與合成變種池</div>
+    <div class="sub" style="margin-top:-8px">選 4 隻上陣,決定召喚池與合成變種池</div>
     <div class="deckGrid" id="deckGrid"></div>
     <div class="vaultMsg" id="deckMsg"></div>
     <button class="btn ghost" id="deckCloseBtn">完成</button>
@@ -387,14 +422,17 @@ const TYPES = {
 const TYPE_KEYS = Object.keys(TYPES);
 const LVL_MUL = l => Math.pow(2.2, l-1);
 
-/* ---------- deck (編隊:肉鴿核心,12 選 6 上場,決定召喚池與合成變種池) ---------- */
+/* ---------- deck (編隊:肉鴿核心,12 選 4 上場,決定召喚池與合成變種池 / PLAN P3-S1) ---------- */
 const CLS_POOL_WEIGHT = { archer:22, mage:22, spark:22, ice:14, poison:14, support:6 };
 const DECK_KEY = 'kdp_deck';
-const DEFAULT_DECK = ['archer','mage','spark','icemage','poison','support'];
+const DECK_SIZE = 4; // P3-S1:編隊上限 6→4
+const DEFAULT_DECK = ['archer','mage','spark','support']; // 橘丸/花火/雷吉/天音(攻擊×3+輔助)
 function loadDeck(){
   let d = null;
   try{ d = JSON.parse(localStorage.getItem(DECK_KEY)||'null'); }catch(e){ d = null; }
-  if (!Array.isArray(d) || d.length!==6 || !d.every(k=>TYPES[k]) || new Set(d).size!==6) d = [...DEFAULT_DECK];
+  // 舊 6 人 deck 遷移:取前 DECK_SIZE 隻(P3-S1)
+  if (Array.isArray(d) && d.length > DECK_SIZE) d = d.slice(0, DECK_SIZE);
+  if (!Array.isArray(d) || d.length!==DECK_SIZE || !d.every(k=>TYPES[k]) || new Set(d).size!==DECK_SIZE) d = [...DEFAULT_DECK];
   return d;
 }
 function saveDeck(){ localStorage.setItem(DECK_KEY, JSON.stringify(deck)); }
@@ -419,7 +457,7 @@ function toggleDeckChar(k){
   const idx = deck.indexOf(k);
   if (idx>=0){ deck.splice(idx,1); saveDeck(); return { ok:true, action:'removed', key:k }; }
   if (!vault.charUnlock[k]) return { ok:false, msg:'尚未解鎖,請先抽卡取得', locked:true, key:k };
-  if (deck.length>=6) return { ok:false, msg:'已滿 6 隻,先取消一隻', key:k };
+  if (deck.length>=DECK_SIZE) return { ok:false, msg:'已滿 '+DECK_SIZE+' 隻,先取消一隻', key:k };
   deck.push(k); saveDeck();
   return { ok:true, action:'added', key:k };
 }
@@ -463,20 +501,53 @@ function rollRarityGeneric(holder, key){
 }
 function rollRarity(){ return rollRarityGeneric(st, 'pity'); }
 
-/* ---------- vault (局外裝備抽卡 / 局外貨幣) ---------- */
-// 裝備數值表:索引 0-3 對應稀有度 N/R/SR/SSR(star-1)
-const GEAR_TABLE = {
-  weapon: { icon:'⚔️', name:'武器', desc:'全隊傷害', values:[0.03,0.06,0.10,0.16] },
-  charm:  { icon:'🛡️', name:'護符', desc:'城堡上限血', values:[1,2,3,5] },
-  pet: { icon:'🐾', name:'寵物', species:{
-    cat:  { icon:'🐱', name:'橘貓', desc:'殺敵金',   values:[0.06,0.10,0.16,0.25] },
-    fox:  { icon:'🦊', name:'冰狐', desc:'減速加成', values:[0.03,0.05,0.08,0.12] },
-    frog: { icon:'🐸', name:'毒蛙', desc:'毒傷加成', values:[0.08,0.12,0.20,0.30] }
-  }}
+/* ---------- vault (局外裝備抽卡 / 局外貨幣) PLAN Phase3 S2/S3:12 寵物被動 + 七部位裝備 ---------- */
+// 裝備七部位基值表:索引 0-3 對應稀有度 N/R/SR/SSR(star-1);isFlat=true 表示數值為固定量(城堡血),否則為百分比
+const EQUIP_SLOTS = ['head','body','hand','shoe','ring','brace','neck'];
+const EQUIP_TABLE = {
+  head:  { icon:'🪖', name:'頭盔', desc:'城堡血',   isFlat:true,  values:[1,2,3,5] },
+  body:  { icon:'🛡️', name:'鎧甲', desc:'城堡血',   isFlat:true,  values:[1,2,4,6] },
+  hand:  { icon:'🧤', name:'手套', desc:'全隊傷害', isFlat:false, values:[0.03,0.06,0.10,0.16] },
+  shoe:  { icon:'👟', name:'戰靴', desc:'全隊攻速', isFlat:false, values:[0.02,0.04,0.07,0.12] },
+  ring:  { icon:'💍', name:'戒指', desc:'暴擊率',   isFlat:false, values:[0.03,0.05,0.08,0.14] },
+  brace: { icon:'📿', name:'手環', desc:'殺敵金',   isFlat:false, values:[0.04,0.07,0.12,0.20] },
+  neck:  { icon:'📜', name:'項鍊', desc:'羈絆加成', isFlat:false, values:[0.10,0.18,0.30,0.50] }
 };
-const GEAR_CATS = ['weapon','charm','pet'];
-const PET_SPECIES = ['cat','fox','frog'];
-const GEAR_DRAW_COST = 20, GEAR_DISASSEMBLE_REFUND = 10, VAULT_FIRST_VISIT_BONUS = 60;
+// 12 寵物被動表:kind 對應 computeRunBuffs() 內的加成維度
+const PET_TABLE = {
+  cat:     { icon:'🐱', name:'橘貓',   desc:'殺敵金 +6/10/16/25%',       kind:'coinMul',    values:[0.06,0.10,0.16,0.25] },
+  fox:     { icon:'🦊', name:'冰狐',   desc:'減速加成 +3/5/8/12%',       kind:'slowBonus',  values:[0.03,0.05,0.08,0.12] },
+  frog:    { icon:'🐸', name:'毒蛙',   desc:'毒傷加成 +8/12/20/30%',     kind:'poisonMul',  values:[0.08,0.12,0.20,0.30] },
+  sparrow: { icon:'🐦', name:'雷雀',   desc:'連鎖傷 +8/12/20/30%',       kind:'chainMul',   values:[0.08,0.12,0.20,0.30] },
+  lizard:  { icon:'🦎', name:'火蜥',   desc:'濺射範圍 +6/10/16/25%',     kind:'splashRange',values:[0.06,0.10,0.16,0.25] },
+  swan:    { icon:'🦢', name:'天鵝',   desc:'光環效果 +6/10/16/25%',     kind:'auraMul',    values:[0.06,0.10,0.16,0.25] },
+  turtle:  { icon:'🐢', name:'石龜',   desc:'城堡上限 +1/2/3/5',         kind:'castleFlat', values:[1,2,3,5] },
+  bee:     { icon:'🐝', name:'蜜蜂',   desc:'全隊攻速 +3/5/8/12%',       kind:'spdMul',     values:[0.03,0.05,0.08,0.12] },
+  owl:     { icon:'🦉', name:'貓頭鷹', desc:'全隊射程 +4/6/10/15%',      kind:'rangeMul',   values:[0.04,0.06,0.10,0.15] },
+  hamster: { icon:'🐹', name:'倉鼠',   desc:'召喚費 -0/1/1/2',           kind:'summonFlat', values:[0,1,1,2] },
+  firefly: { icon:'🪲', name:'螢火蟲', desc:'結算鑽石 +5/8/12/20%',      kind:'diamondMul', values:[0.05,0.08,0.12,0.20] },
+  dragon:  { icon:'🐉', name:'小龍',   desc:'全隊傷害 +3/5/8/12%',       kind:'dmgMul',     values:[0.03,0.05,0.08,0.12] }
+};
+const PET_SPECIES = Object.keys(PET_TABLE); // 12 種
+const PET_CRAFT_COST = 30;      // 合成固定消耗 30 張碎片(不分稀有度)
+const PET_DISASSEMBLE_REFUND = 15;
+const EQUIP_REFUND_DIAMOND = 10;
+// 洗詞綴詞綴池(PLAN S3c):10 種,擲中機率均勻;scaled=true 者再擲稀有度檔決定數值,否則為固定值
+const AFFIX_POOL = ['critDmg','poisonCap','slowBonus','chainJump','splashRange','startGold','summonCostCut','bossDmg','diamondBonus','chapterHeal'];
+const AFFIX_DEF = {
+  critDmg:       { label:'暴擊傷害',   scaled:true,  values:[0.30,0.50,0.80,1.20] },
+  poisonCap:     { label:'毒層上限',   scaled:false, value:1 },
+  slowBonus:     { label:'減速',       scaled:true,  values:[0.03,0.04,0.06,0.08] },
+  chainJump:     { label:'連鎖跳數',   scaled:false, value:1 },
+  splashRange:   { label:'濺射範圍',   scaled:true,  values:[0.08,0.12,0.18,0.28] },
+  startGold:     { label:'開局金幣',   scaled:true,  values:[20,30,50,80] },
+  summonCostCut: { label:'召喚費',     scaled:false, value:-1 },
+  bossDmg:       { label:'Boss傷害',   scaled:true,  values:[0.08,0.12,0.20,0.30] },
+  diamondBonus:  { label:'結算鑽石',   scaled:true,  values:[0.08,0.12,0.18,0.30] },
+  chapterHeal:   { label:'章節回血',   scaled:true,  values:[1,1,2,3] }
+};
+const REROLL_COST = 120;
+const VAULT_FIRST_VISIT_BONUS = 60;
 const VAULT_KEY = 'kdp_vault';
 function loadVault(){
   let v = null;
@@ -488,9 +559,9 @@ function loadVault(){
   if (typeof v.gearPity!=='number') v.gearPity = 0;
   if (typeof v.firstVisit!=='boolean') v.firstVisit = false;
 
-  // --- v2 遷移(PLAN S4):角色解鎖/EXP/寵物碎片/共用抽卡保底。v!==2 視為舊檔,僅此升級一次。 ---
+  // --- v2 遷移(PLAN S4):角色解鎖/EXP/寵物碎片/共用抽卡保底。v<2 視為舊檔,僅此升級一次(v3 之後版號不再是 2,故用 <2 判斷,避免每次載入重跑)。 ---
   // charUnlock 型別損毀(竄改/壞檔)時視同需要重建預設解鎖,理由同遷移:寧可還原安全基準,也不能讓玩家連原6隻都不能用。
-  const needsMigration = v.v !== 2;
+  const needsMigration = !(v.v >= 2);
   const charUnlockWasInvalid = !v.charUnlock || typeof v.charUnlock!=='object' || Array.isArray(v.charUnlock);
   if (charUnlockWasInvalid) v.charUnlock = {};
   if (needsMigration || charUnlockWasInvalid){
@@ -516,7 +587,65 @@ function loadVault(){
   // redeemed[]:記錄已兌換過的「非 unlimited」兌換碼(供日後限次兌換碼查重用);目前 REDEEM_CODES 全為 unlimited,本欄位暫不影響任何邏輯。
   if (!v.redeemed || !Array.isArray(v.redeemed)) v.redeemed = [];
 
-  v.v = 2;
+  // --- v3 遷移(PLAN Phase3 S1-S5):裝備 weapon→hand/charm→head、寵物碎片攤平、雙寵欄、金幣。origVer<3 僅升級一次。 ---
+  // v1/爛檔會先經上面 v2 步驟補完 v.gear/v.petShards 基本形狀,這裡才在其上做 v3 轉換,形成 v1→v2→v3 一路自癒鏈。
+  const needsV3 = v.v !== 3;
+  if (needsV3){
+    // 裝備:weapon→hand、charm→head,同稀有度基值對映,等級歸 0
+    const oldGear = v.gear || {};
+    const migrateGearItem = (old, newSlot) => {
+      if (!old) return null;
+      const idx = Math.max(0, Math.min(3, (old.star||1)-1));
+      return { rarity: old.rarity||RARITY[idx].key, star: old.star||(idx+1), value: EQUIP_TABLE[newSlot].values[idx], lvl:0, affix:null, goldSpent:0 };
+    };
+    v.equip = {};
+    EQUIP_SLOTS.forEach(slot=>{ v.equip[slot] = null; });
+    if (oldGear.weapon) v.equip.hand = migrateGearItem(oldGear.weapon, 'hand');
+    if (oldGear.charm)  v.equip.head = migrateGearItem(oldGear.charm, 'head');
+
+    // 寵物:petShards[種][稀有度] 加總為每種單一數字;gear.pet → petSlots[0]
+    const oldShards = v.petShards || {};
+    const newShards = {};
+    PET_SPECIES.forEach(sp=>{
+      let sum = 0;
+      const os = oldShards[sp];
+      if (os && typeof os==='object'){ RARITY.forEach(r=>{ if (typeof os[r.key]==='number' && os[r.key]>0) sum += os[r.key]; }); }
+      else if (typeof os==='number' && os>0) sum = os;
+      newShards[sp] = sum;
+    });
+    v.petShards = newShards;
+
+    v.petSlots = [null, null];
+    if (oldGear.pet){
+      v.petSlots[0] = { species: oldGear.pet.species, rarity: oldGear.pet.rarity, star: oldGear.pet.star, value: oldGear.pet.value };
+    }
+
+    if (typeof v.gold !== 'number' || isNaN(v.gold)) v.gold = 0; // 金幣:0 起步
+
+    delete v.gear; // 舊 weapon/charm/pet 容器不再使用
+  }
+
+  // v3 欄位防禦性自癒(涵蓋「已是 v3 但欄位被竄改」的爛檔):任何時刻載入都重新夾緊一次
+  if (typeof v.gold!=='number' || isNaN(v.gold) || v.gold<0) v.gold = 0;
+  if (!v.equip || typeof v.equip!=='object' || Array.isArray(v.equip)) v.equip = {};
+  EQUIP_SLOTS.forEach(slot=>{
+    const it = v.equip[slot];
+    if (it && typeof it==='object' && !Array.isArray(it) && RARITY.some(r=>r.key===it.rarity)){
+      if (typeof it.lvl!=='number' || isNaN(it.lvl) || it.lvl<0) it.lvl = 0;
+      if (it.lvl>10) it.lvl = 10;
+      if (typeof it.goldSpent!=='number' || isNaN(it.goldSpent) || it.goldSpent<0) it.goldSpent = 0;
+      if (it.affix && (typeof it.affix!=='object' || !AFFIX_DEF[it.affix.type])) it.affix = null;
+      if (typeof it.value!=='number' || isNaN(it.value)) it.value = EQUIP_TABLE[slot].values[Math.max(0,(it.star||1)-1)];
+    } else {
+      v.equip[slot] = null;
+    }
+  });
+  if (!Array.isArray(v.petSlots) || v.petSlots.length!==2) v.petSlots = [null, null];
+  v.petSlots = v.petSlots.map(p => (p && typeof p==='object' && PET_TABLE[p.species] && RARITY.some(r=>r.key===p.rarity)) ? p : null);
+  if (!v.petShards || typeof v.petShards!=='object' || Array.isArray(v.petShards)) v.petShards = {};
+  PET_SPECIES.forEach(sp=>{ if (typeof v.petShards[sp]!=='number' || isNaN(v.petShards[sp]) || v.petShards[sp]<0) v.petShards[sp] = 0; });
+
+  v.v = 3;
   return v;
 }
 function saveVault(){ localStorage.setItem(VAULT_KEY, JSON.stringify(vault)); }
@@ -548,53 +677,75 @@ function isGearStronger(a, b){
   if (a.star !== b.star) return a.star > b.star;
   return a.value > b.value;
 }
-function gearItemLabel(it){
-  const nm = it.cat==='pet' ? GEAR_TABLE.pet.species[it.species].name : GEAR_TABLE[it.cat].name;
-  const ic = it.cat==='pet' ? GEAR_TABLE.pet.species[it.species].icon : GEAR_TABLE[it.cat].icon;
-  return ic+nm+' '+it.rarity;
+function equipItemLabel(slot, it){ return EQUIP_TABLE[slot].icon+EQUIP_TABLE[slot].name+' '+it.rarity; }
+function petItemLabel(species, it){ return PET_TABLE[species].icon+PET_TABLE[species].name+' '+it.rarity; }
+// 裝備效果單件基值(考量升級等級):值×(1+0.20×lvl),Lv10=×3(PLAN S3b)
+function equipEffective(slot){
+  const it = vault.equip[slot];
+  if (!it) return 0;
+  return it.value * (1 + 0.20*(it.lvl||0));
 }
-// 裝備抽卡核心(不含扣款/存檔/UI):holder[key] 帶入保底計數器,cats 決定抽卡分類池。
-// 舊版 gachaGear()(全 3 類,含 pet)與新版 drawEquip()(僅 weapon/charm)共用此核心。
-function drawGearCore(cats, holder, key){
-  const r = rollRarityGeneric(holder, key);
+// 詞綴數值加總(跨 7 部位,同型詞綴可疊加,PLAN S3c)
+function affixSum(type){
+  let s = 0;
+  EQUIP_SLOTS.forEach(slot=>{ const it = vault.equip[slot]; if (it && it.affix && it.affix.type===type) s += it.affix.value; });
+  return s;
+}
+// 裝備抽卡(PLAN S3):七部位均勻隨機+稀有度,同部位取最強(先比稀有度再比基值),弱者分解返 10💎(+已投金幣 50%,若被換下的是舊裝備)
+function drawEquipCard(){
+  const slot = EQUIP_SLOTS[Math.floor(Math.random()*EQUIP_SLOTS.length)];
+  const r = rollRarityGeneric(vault, 'gachaPity');
   vault.pullCounts[r.key] = (vault.pullCounts[r.key]||0) + 1;
   const idx = r.star - 1;
-  const cat = cats[Math.floor(Math.random()*cats.length)];
-  let item;
-  if (cat==='pet'){
-    const sp = PET_SPECIES[Math.floor(Math.random()*PET_SPECIES.length)];
-    item = { cat:'pet', species:sp, rarity:r.key, star:r.star, value:GEAR_TABLE.pet.species[sp].values[idx] };
-  } else {
-    item = { cat, rarity:r.key, star:r.star, value:GEAR_TABLE[cat].values[idx] };
-  }
-  const old = vault.gear[cat];
-  let equipped, refund = 0;
+  const item = { rarity:r.key, star:r.star, value:EQUIP_TABLE[slot].values[idx], lvl:0, affix:null, goldSpent:0 };
+  const old = vault.equip[slot];
+  let equipped, refund = 0, refundGold = 0;
   if (isGearStronger(item, old)){
-    vault.gear[cat] = item; equipped = true;
-    if (old) refund = GEAR_DISASSEMBLE_REFUND;
+    vault.equip[slot] = item; equipped = true;
+    if (old){ refund = EQUIP_REFUND_DIAMOND; refundGold = Math.floor((old.goldSpent||0)*0.5); vault.gold = (vault.gold||0)+refundGold; }
   } else {
-    refund = GEAR_DISASSEMBLE_REFUND; equipped = false;
+    refund = EQUIP_REFUND_DIAMOND; equipped = false;
   }
   if (refund) vault.diamonds += refund;
-  return { item, equipped, refund, rar:r.key };
+  const msg = equipped
+    ? ('獲得 '+equipItemLabel(slot,item)+'!'+(refund?('舊裝備分解 +'+refund+'💎'+(refundGold?'+'+refundGold+'金':'')):'已裝備'))
+    : ('獲得 '+equipItemLabel(slot,item)+',較弱,已分解 +'+refund+'💎');
+  return { kind:'equip', key:slot, rar:r.key, star:r.star, value:item.value, equipped, refund, refundGold, delta:refund, msg };
 }
-// 舊版直抽裝備(含 pet 類,獨立 gearPity 保底):不再被寶庫單抽按鈕綁定,保留供相容呼叫。
-function gachaGear(){
-  if (vault.diamonds < GEAR_DRAW_COST){ vaultMsg('鑽石不夠!(需 '+GEAR_DRAW_COST+'💎)'); beep(160,.15,'sawtooth'); return; }
-  vault.diamonds -= GEAR_DRAW_COST;
-  const { item, equipped, refund } = drawGearCore(GEAR_CATS, vault, 'gearPity');
-  const msg = equipped ? ('獲得 '+gearItemLabel(item)+'!'+(refund?'舊裝備分解 +'+refund+'💎':'已裝備')) : ('獲得 '+gearItemLabel(item)+',較弱,已分解 +'+refund+'💎');
+// 裝備升級(PLAN S3b):費用 50×1.6^lvl 金幣,效果=基值×(1+0.20×lvl),上限 Lv10
+function upgradeEquip(slot){
+  if (!EQUIP_TABLE[slot]) return { ok:false, msg:'無效部位' };
+  const it = vault.equip[slot];
+  if (!it) return { ok:false, msg:'尚未持有此部位裝備' };
+  if (it.lvl>=10) return { ok:false, msg:'已達最高等級 Lv10' };
+  const cost = Math.round(50*Math.pow(1.6, it.lvl));
+  if ((vault.gold||0) < cost) return { ok:false, msg:'金幣不足(需 '+cost+'💰)' };
+  vault.gold -= cost;
+  it.lvl++;
+  it.goldSpent = (it.goldSpent||0) + cost;
   saveVault();
-  vaultMsg(msg);
-  renderVault();
-  beep(item.star>=3?720:520, item.star>=3?.2:.12, 'triangle', .05, item.star>=3?1080:780);
+  return { ok:true, lvl:it.lvl, cost, msg:equipItemLabel(slot,it)+' 升級成功!Lv'+it.lvl };
+}
+// 洗詞綴(PLAN S3c):120 金幣,直接覆蓋舊詞綴,不限次數
+function rerollAffix(slot){
+  if (!EQUIP_TABLE[slot]) return { ok:false, msg:'無效部位' };
+  const it = vault.equip[slot];
+  if (!it) return { ok:false, msg:'尚未持有此部位裝備' };
+  if ((vault.gold||0) < REROLL_COST) return { ok:false, msg:'金幣不足(需 '+REROLL_COST+'💰)' };
+  vault.gold -= REROLL_COST;
+  const type = AFFIX_POOL[Math.floor(Math.random()*AFFIX_POOL.length)];
+  const def = AFFIX_DEF[type];
+  const value = def.scaled ? def.values[weightedPick(RARITY).star-1] : def.value;
+  it.affix = { type, value };
+  it.goldSpent = (it.goldSpent||0) + REROLL_COST;
+  saveVault();
+  return { ok:true, affix:it.affix, msg:'洗出:'+def.label+' '+(def.scaled? (type==='startGold'?'+'+value:(Math.round(value*100)+'%')) : value) };
 }
 
 /* ---------- 抽卡 v2(PLAN S1):角色卡 40% / 寵物碎片 30% / 裝備 30%,共用 vault.gachaPity 保底 ---------- */
 const GACHA_COST = 20, GACHA_TEN_COST = 180;
 const GACHA_TYPE_WEIGHTS = [ {key:'char', rate:40}, {key:'petShard', rate:30}, {key:'equip', rate:30} ];
 const CHAR_EXP_ON_DUP = { N:10, R:25, SR:60, SSR:150 };
-const PET_SHARD_CRAFT_THRESH = { N:10, R:20, SR:40, SSR:80 };
 // 角色卡:12 隻均勻隨機;首抽解鎖(編隊可選),重複依稀有度轉 EXP。
 function drawCharCard(){
   const key = TYPE_KEYS[Math.floor(Math.random()*TYPE_KEYS.length)];
@@ -609,22 +760,18 @@ function drawCharCard(){
   vault.charExp[key] = (vault.charExp[key]||0) + delta;
   return { kind:'char', key, rar:r.key, unlocked:false, delta, msg:'獲得角色卡「'+name+'」('+r.key+'),重複轉換 EXP +'+delta };
 }
-// 寵物碎片:抽到隨機寵物(貓/狐/蛙)× 隨機稀有度的碎片 ×2,合成另見 craftPet()。
+// 寵物碎片:抽到隨機種碎片 ×3(P3-S2:碎片單一維度,不分稀有度);仍呼叫 rollRarityGeneric 純為共用保底計數器。
 function drawPetShard(){
   const species = PET_SPECIES[Math.floor(Math.random()*PET_SPECIES.length)];
   const r = rollRarityGeneric(vault, 'gachaPity');
   vault.pullCounts[r.key] = (vault.pullCounts[r.key]||0) + 1;
-  const gained = 2;
-  vault.petShards[species][r.key] = (vault.petShards[species][r.key]||0) + gained;
-  const nm = GEAR_TABLE.pet.species[species].name;
-  return { kind:'pet', key:species, rar:r.key, delta:gained, shards:vault.petShards[species][r.key], msg:'獲得'+nm+' '+r.key+' 碎片 ×'+gained+'(現有 '+vault.petShards[species][r.key]+' 片)' };
+  const gained = 3;
+  vault.petShards[species] = (vault.petShards[species]||0) + gained;
+  const nm = PET_TABLE[species].name;
+  return { kind:'pet', key:species, rar:r.key, delta:gained, shards:vault.petShards[species], msg:'獲得'+nm+' 碎片 ×'+gained+'(現有 '+vault.petShards[species]+' 片)' };
 }
-// 裝備:weapon/charm 沿用 drawGearCore 內核(pet 類不在此分類池,由碎片合成取代直抽)。
-function drawEquip(){
-  const { item, equipped, refund, rar } = drawGearCore(['weapon','charm'], vault, 'gachaPity');
-  const msg = equipped ? ('獲得 '+gearItemLabel(item)+'!'+(refund?'舊裝備分解 +'+refund+'💎':'已裝備')) : ('獲得 '+gearItemLabel(item)+',較弱,已分解 +'+refund+'💎');
-  return { kind:'equip', key:item.cat, rar, star:item.star, value:item.value, equipped, refund, delta:refund, msg };
-}
+// 裝備:P3-S3 七部位均勻隨機,沿用 drawEquipCard()。
+function drawEquip(){ return drawEquipCard(); }
 // 純擲卡核心(不扣鑽石):gachaOnce/gachaTen 共用,先擲類型(40/30/30)再擲對應分支。
 function gachaDrawCore(){
   const type = weightedPick(GACHA_TYPE_WEIGHTS).key;
@@ -658,30 +805,34 @@ function gachaTen(){
   beep(720,.25,'triangle',.06,1080);
   return results;
 }
-// 寵物碎片合成(PLAN S1):門檻 N10/R20/SR40/SSR80,扣碎片後走「取最強/分解返 10💎」邏輯。
-function craftPet(species, rar){
-  if (!PET_SPECIES.includes(species) || !PET_SHARD_CRAFT_THRESH[rar]) return { ok:false, msg:'無效寵物或稀有度' };
-  const need = PET_SHARD_CRAFT_THRESH[rar];
-  const have = (vault.petShards[species] && vault.petShards[species][rar]) || 0;
-  if (have < need) return { ok:false, msg:'碎片不足('+have+'/'+need+')' };
-  vault.petShards[species][rar] -= need;
-  const star = RARITY.find(x=>x.key===rar).star;
-  const idx = star - 1;
-  const item = { cat:'pet', species, rarity:rar, star, value:GEAR_TABLE.pet.species[species].values[idx] };
-  const old = vault.gear.pet;
-  let equipped, refund = 0;
-  if (isGearStronger(item, old)){
-    vault.gear.pet = item; equipped = true;
-    if (old) refund = GEAR_DISASSEMBLE_REFUND;
+// 寵物碎片合成(P3-S2):固定消耗 30 張,合成瞬間擲稀有度(N70/R22/SR6/SSR2,無保底);
+// 同種已在欄位中 → 取較高者,低者分解返 15💎;不同種且有空欄 → 直接裝入;不同種但雙欄已滿 → 分解返 15💎(手動替換留待 Step2 UI)。
+function craftPet(species){
+  if (!PET_TABLE[species]) return { ok:false, msg:'無效寵物' };
+  const have = vault.petShards[species]||0;
+  if (have < PET_CRAFT_COST) return { ok:false, msg:'碎片不足('+have+'/'+PET_CRAFT_COST+')' };
+  vault.petShards[species] -= PET_CRAFT_COST;
+  const r = weightedPick(RARITY);
+  const item = { species, rarity:r.key, star:r.star, value:PET_TABLE[species].values[r.star-1] };
+  const dupIdx = vault.petSlots.findIndex(p=>p && p.species===species);
+  let equipped = false, refund = 0, targetSlot = -1;
+  if (dupIdx>=0){
+    const old = vault.petSlots[dupIdx];
+    if (isGearStronger(item, old)){ vault.petSlots[dupIdx] = item; equipped = true; targetSlot = dupIdx; }
+    refund = PET_DISASSEMBLE_REFUND; // 兩者中較弱的一個(新或舊)分解,固定返 15💎
   } else {
-    refund = GEAR_DISASSEMBLE_REFUND; equipped = false;
+    const emptyIdx = vault.petSlots.findIndex(p=>!p);
+    if (emptyIdx>=0){ vault.petSlots[emptyIdx] = item; equipped = true; targetSlot = emptyIdx; }
+    else { refund = PET_DISASSEMBLE_REFUND; }
   }
   if (refund) vault.diamonds += refund;
   saveVault();
-  const msg = equipped ? ('合成 '+gearItemLabel(item)+' 成功!'+(refund?'舊寵物分解 +'+refund+'💎':'已裝備')) : ('合成 '+gearItemLabel(item)+',較弱,已分解 +'+refund+'💎');
+  const msg = equipped
+    ? ('合成 '+petItemLabel(species,item)+' 成功!裝入第'+(targetSlot+1)+'欄'+(refund?'(舊寵分解 +'+refund+'💎)':''))
+    : ('合成 '+petItemLabel(species,item)+',較弱或雙欄已滿,已分解 +'+refund+'💎');
   vaultMsg(msg);
   renderVault();
-  return { ok:true, equipped, refund, item, msg };
+  return { ok:true, equipped, refund, item, slot:targetSlot, msg };
 }
 
 /* ---------- 人物等級系統(PLAN S2) ---------- */
@@ -717,25 +868,83 @@ function charDmgMul(key){
   return 1 + 0.02*lvl + 0.05*charMilestones(lvl);
 }
 function vaultMsg(t){ const el=document.getElementById('vaultMsg'); if (el) el.textContent = t; }
-function renderVault(){
-  const dEl = document.getElementById('vaultDiamonds'); if (dEl) dEl.textContent = '💎 鑽石:'+vault.diamonds;
-  const row = document.getElementById('vaultGearRow');
-  if (row){
-    row.innerHTML = '';
-    GEAR_CATS.forEach(cat=>{
-      const it = vault.gear[cat];
-      const label = cat==='pet' ? '寵物' : GEAR_TABLE[cat].name;
-      const icon = cat==='pet' ? (it?GEAR_TABLE.pet.species[it.species].icon:'🐾') : GEAR_TABLE[cat].icon;
-      let desc;
-      if (!it) desc = '尚未持有';
-      else if (cat==='weapon') desc = it.rarity+' 全隊傷害 +'+Math.round(it.value*100)+'%';
-      else if (cat==='charm') desc = it.rarity+' 城堡上限 +'+it.value;
-      else desc = it.rarity+' '+GEAR_TABLE.pet.species[it.species].name+' '+GEAR_TABLE.pet.species[it.species].desc+' +'+Math.round(it.value*100)+'%';
-      const div = document.createElement('div'); div.className = 'gearCard';
-      div.innerHTML = '<span class="ic">'+icon+'</span><span>'+label+'<small>'+desc+'</small></span>';
-      row.appendChild(div);
-    });
+// P3-S2 UI:裝備效果文字(依 isFlat 決定顯示 +N 或 +N%,equipEffective 為 Step1 已交付的資料層函式)
+function equipEffTxt(slot){
+  const def = EQUIP_TABLE[slot], eff = equipEffective(slot);
+  return def.isFlat ? ('+'+Math.round(eff)) : ('+'+Math.round(eff*100)+'%');
+}
+let selectedEquipSlot = null; // 裝備分頁目前展開詳情卡的部位(null=未選)
+// 裝備七部位格網:稀有度色框(rar-N/R/SR/SSR)、空位虛框,點格開下方詳情卡
+function renderEquipGrid(){
+  const grid = document.getElementById('equipGrid'); if (!grid) return;
+  grid.innerHTML = '';
+  EQUIP_SLOTS.forEach(slot=>{
+    const it = vault.equip[slot];
+    const def = EQUIP_TABLE[slot];
+    const cell = document.createElement('div');
+    cell.className = 'equipCell'+(it?(' rar-'+it.rarity):' empty')+(selectedEquipSlot===slot?' sel':'');
+    if (it){
+      cell.innerHTML = '<span class="ic">'+def.icon+'</span><span class="nm">'+def.name+'</span>'+
+        '<span class="lv">Lv'+(it.lvl||0)+' '+equipEffTxt(slot)+'</span>'+
+        (it.affix ? ('<span class="afx">'+AFFIX_DEF[it.affix.type].label+'</span>') : '');
+    } else {
+      cell.innerHTML = '<span class="ic">'+def.icon+'</span><span class="nm">'+def.name+'</span><span class="lv">空</span>';
+    }
+    cell.onclick = ()=>{ selectedEquipSlot = (selectedEquipSlot===slot) ? null : slot; renderEquipGrid(); renderEquipDetail(); beep(440,.06,'sine'); };
+    grid.appendChild(cell);
+  });
+}
+// 詞綴顯示文字:非數值型直接顯示固定值;數值型多數為百分比,startGold/chapterHeal 為整數(金幣/血量),不套百分比
+function affixValueTxt(type, value){
+  const def = AFFIX_DEF[type];
+  if (!def.scaled) return value;
+  if (type==='startGold' || type==='chapterHeal') return '+'+value;
+  return Math.round(value*100)+'%';
+}
+// 裝備詳情卡:效果數值、升級按鈕(顯示費用,金幣不足/滿級灰化)、洗技能按鈕(120金,金幣不足灰化)、詞綴即時顯示
+function renderEquipDetail(){
+  const box = document.getElementById('equipDetail'); if (!box) return;
+  if (!selectedEquipSlot){ box.innerHTML = ''; return; }
+  const slot = selectedEquipSlot, def = EQUIP_TABLE[slot], it = vault.equip[slot];
+  if (!it){
+    box.innerHTML = '<div class="equipDetail"><div class="dTitle">'+def.icon+' '+def.name+'</div>'+
+      '<div>尚未持有此部位裝備,請至「抽卡」分頁取得</div></div>';
+    return;
   }
+  const cost = Math.round(50*Math.pow(1.6, it.lvl||0));
+  const maxed = (it.lvl||0)>=10;
+  const canUpgrade = !maxed && (vault.gold||0)>=cost;
+  const canReroll = (vault.gold||0)>=REROLL_COST;
+  const affixTxt = it.affix ? (AFFIX_DEF[it.affix.type].label+' '+affixValueTxt(it.affix.type, it.affix.value)) : '無';
+  box.innerHTML = '<div class="equipDetail">'+
+    '<div class="dTitle">'+def.icon+' '+def.name+' <span style="opacity:.7;font-size:11px">'+it.rarity+'</span></div>'+
+    '<div>效果:'+def.desc+' '+equipEffTxt(slot)+'(Lv'+(it.lvl||0)+'/10)</div>'+
+    '<div>詞綴:'+affixTxt+'</div>'+
+    '<div style="opacity:.75;font-size:11px">已投金幣:'+(it.goldSpent||0)+'💰</div>'+
+    '<div class="dBtns">'+
+      '<button class="eqBtn'+(canUpgrade?'':' disabled')+'" id="eqUpgradeBtn">'+(maxed?'⬆️ 已滿級':('⬆️ 升級(費用 '+cost+'💰)'))+'</button>'+
+      '<button class="eqBtn reroll'+(canReroll?'':' disabled')+'" id="eqRerollBtn">🎲 洗技能(120💰)</button>'+
+    '</div></div>';
+  const uBtn = document.getElementById('eqUpgradeBtn');
+  if (uBtn) uBtn.onclick = ()=>{
+    const res = upgradeEquip(slot);
+    vaultMsg(res.msg);
+    beep(res.ok?720:160,.15,res.ok?'triangle':'sawtooth');
+    renderVault();
+  };
+  const rBtn = document.getElementById('eqRerollBtn');
+  if (rBtn) rBtn.onclick = ()=>{
+    const res = rerollAffix(slot);
+    vaultMsg(res.msg);
+    beep(res.ok?720:160,.15,res.ok?'triangle':'sawtooth');
+    renderVault();
+  };
+}
+// P3-S2:寶庫頂部雙貨幣(鑽石+金幣)常駐顯示,任一分頁操作後皆呼叫本函式即時更新
+function renderVault(){
+  const dEl = document.getElementById('vaultDiamonds'); if (dEl) dEl.textContent = '💎 鑽石:'+vault.diamonds+'  ・  💰 金幣:'+(vault.gold||0);
+  renderEquipGrid();
+  renderEquipDetail();
   const ratesEl = document.getElementById('vaultRates');
   if (ratesEl) ratesEl.textContent = '角色40% 碎片30% 裝備30% ・ 保底:'+(PITY-vault.gachaPity)+' 抽內必出 SR+';
 }
@@ -764,40 +973,97 @@ function redeemCode(raw){
 let st;
 // stageMode: null=無盡模式(原樣行為不變);1-50=關卡模式(固定 10 波,波血 ×1.15^(stage-1))。
 // Step2 UI 呼叫 reset(stageNum) 進入指定關卡;reset()/reset(undefined) = 無盡模式,行為與既有版本完全一致。
+// 局外裝備+寵物 run-state 乘數層(P3 S2/S3/S4/S5):每次 reset() 重新計算一次,注入 st.buff/st.castle 等。
+function computeRunBuffs(){
+  const pet = { coinMul:0, slowBonus:0, poisonMul:0, chainMul:0, splashRange:0, auraMul:0, castleFlat:0,
+                spdMul:0, rangeMul:0, summonFlat:0, diamondMul:0, dmgMul:0 };
+  (vault.petSlots||[]).forEach(p=>{
+    if (!p || !PET_TABLE[p.species]) return;
+    const kind = PET_TABLE[p.species].kind;
+    pet[kind] = (pet[kind]||0) + p.value;
+  });
+  return {
+    pet,
+    castleFromEquip: equipEffective('head') + equipEffective('body'),
+    dmgFromEquip: equipEffective('hand'),
+    spdFromEquip: equipEffective('shoe'),
+    critChanceBase: Math.min(0.60, equipEffective('ring')),
+    coinFromEquip: equipEffective('brace'),
+    neckMul: equipEffective('neck'),
+    critDmgBonus: affixSum('critDmg'),
+    poisonCapAffix: affixSum('poisonCap'),
+    slowAffix: affixSum('slowBonus'),
+    chainJumpAffix: affixSum('chainJump'),
+    splashAffix: affixSum('splashRange'),
+    startGoldAffix: affixSum('startGold'),
+    summonCutAffix: affixSum('summonCostCut'),
+    bossDmgAffix: affixSum('bossDmg'),
+    diamondAffix: affixSum('diamondBonus'),
+    chapterHealAffix: affixSum('chapterHeal')
+  };
+}
 function reset(stageMode){
-  // 局外裝備效果(寶庫)於開局注入:護符加城堡上限、武器加傷害乘數、寵物加對應特效
-  const gWeapon = vault.gear.weapon, gCharm = vault.gear.charm, gPet = vault.gear.pet;
-  const castleMax0 = 10 + (gCharm ? gCharm.value : 0);
+  const RB = computeRunBuffs();
+  const castleMax0 = 10 + RB.castleFromEquip + (RB.pet.castleFlat||0);
   st = {
-    mode:'menu', t:0, wave:0, castle:castleMax0, castleMax:castleMax0, coins:30, summonCost:10,
+    mode:'menu', t:0, wave:0, castle:castleMax0, castleMax:castleMax0,
+    coins: 30 + (RB.startGoldAffix||0), summonCost:10,
     enemies:[], projs:[], floats:[], puffs:[], lightnings:[],
     waveLeft:0, spawnT:0, betweenT:2, inWave:false,
     sel:-1, shake:0, pity:0, deadlockT:0,
-    buff:{ dmg:1, spd:1, coin:1, frostCap:.55, frostBonus:0, poisonCapBonus:0, poisonDmgMul:1, auraMul:1,
-           gearDmg: gWeapon ? (1+gWeapon.value) : 1, gearCoin: (gPet && gPet.species==='cat') ? (1+gPet.value) : 1 },
+    buff:{
+      dmg:1, spd:1, coin:1, frostCap:.55,
+      frostBonus: (RB.slowAffix||0) + (RB.pet.slowBonus||0),
+      poisonCapBonus: (RB.poisonCapAffix||0),
+      poisonDmgMul: 1 + (RB.pet.poisonMul||0),
+      auraMul: 1 + (RB.pet.auraMul||0),
+      gearDmg: 1 + RB.dmgFromEquip,
+      gearCoin: 1 + RB.coinFromEquip,
+      atkSpdMul: (1+RB.spdFromEquip) * (1+(RB.pet.spdMul||0)),
+      petDmgMul: 1 + (RB.pet.dmgMul||0),
+      petCoinMul: 1 + (RB.pet.coinMul||0),
+      rangeMul: 1 + (RB.pet.rangeMul||0),
+      splashRangeBonus: (RB.pet.splashRange||0) + (RB.splashAffix||0),
+      chainDmgMul: 1 + (RB.pet.chainMul||0),
+      chainJumpBonus: RB.chainJumpAffix||0,
+      critChance: RB.critChanceBase,
+      critDmgBonus: RB.critDmgBonus,
+      bossDmgBonus: RB.bossDmgAffix||0,
+      diamondMul: 1 + (RB.diamondAffix||0) + (RB.pet.diamondMul||0),
+      summonDiscount: (RB.summonCutAffix||0) + (RB.pet.summonFlat||0),
+      neckMul: RB.neckMul||0,
+      chapterHealBonus: RB.chapterHealAffix||0
+    },
     diversity:{ count:0, bonus:0 },
     chapterLog:[], chapterBanner:null,
-    pet: gPet || null,
+    pet: (vault.petSlots && vault.petSlots[0]) || null, // 舊版單寵欄位相容(canvas 圖示等最小適配用)
+    petSlots: (vault.petSlots||[null,null]).slice(),
     best: +(localStorage.getItem('kdp_best')||0),
     stageMode: stageMode || null,
-    stageResult: null
+    stageResult: null,
+    goldGained: 0
   };
-  if (gPet && gPet.species==='fox') st.buff.frostBonus += gPet.value;
-  if (gPet && gPet.species==='frog') st.buff.poisonDmgMul *= (1+gPet.value);
   SLOTS = makeSlots(BASE_SLOTS);
   ADJ = buildAdj();
 }
 reset();
 
-/* ---------- diversity bonus (職業羈絆) ---------- */
-// 場上不同兵種種類數(support 算一種):>=4 種 +10% 傷害,6 種全滿 +20%(取高不疊加)
+/* ---------- diversity bonus (職業羈絆,P3-S1 門檻改 3職業+10%/4職業+20%;項鍊詞綴乘在 bonus 上) ---------- */
 function computeDiversity(){
   const clsSet = new Set();
   SLOTS.forEach(s=>{ if (s.unit) clsSet.add(TYPES[s.unit.type].cls); });
   const count = clsSet.size;
   let bonus = 0;
-  if (count>=6) bonus = 0.20; else if (count>=4) bonus = 0.10;
+  if (count>=4) bonus = 0.20; else if (count>=3) bonus = 0.10;
+  bonus *= (1 + (st.buff.neckMul||0));
   return { count, bonus };
+}
+// S5 金幣結算(無盡 gameOver / 關卡 settleStage 勝敗皆算):vault.gold += floor(戰場金幣×0.3+波數×2)
+function settleGold(){
+  const gained = Math.floor(st.coins*0.3 + st.wave*2);
+  vault.gold = (vault.gold||0) + gained;
+  saveVault();
+  return gained;
 }
 
 /* ---------- chapter rating (章節評級結算) ---------- */
@@ -812,9 +1078,10 @@ function chapterRating(hp){
 function settleChapter(){
   const chapter = st.wave/10;
   const rating = chapterRating(st.castle);
-  const reward = CHAPTER_DIAMONDS[rating];
+  const reward = Math.floor(CHAPTER_DIAMONDS[rating] * (st.buff.diamondMul||1));
   st.chapterLog.push({ chapter, rating, castle:st.castle, reward });
   vault.diamonds += reward; saveVault();
+  if (st.buff.chapterHealBonus) st.castle = Math.min(st.castleMax, st.castle + st.buff.chapterHealBonus);
   st.chapterBanner = { text:'📖 第'+chapter+'章 評級 '+rating+'  +'+reward+'💎', t:0 };
   beep(rating==='S'?880:rating==='A'?700:rating==='B'?560:420, .3, 'triangle', .06, rating==='S'?1200:900);
 }
@@ -839,11 +1106,13 @@ function settleStage(){
     reward = isFirstClear ? (20+stage*2) : Math.floor(CHAPTER_DIAMONDS[chapterRating(st.castle)]/2);
     if (reachesTriple) reward += 15;
   }
+  reward = Math.floor(reward * (st.buff.diamondMul||1));
   if (stars>prevStars) stages[stage] = stars;
   saveStages();
   vault.diamonds += reward; saveVault();
+  const goldGained = settleGold(); // S5:關卡結算(勝敗皆算),此處為「勝」分支
   st.mode = 'stagecleared';
-  st.stageResult = { stage, stars, reward, castle:st.castle, isFirstClear, reachesTriple };
+  st.stageResult = { stage, stars, reward, castle:st.castle, isFirstClear, reachesTriple, goldGained };
   beep(stars>=3?880:stars===2?700:560, .3, 'triangle', .06, stars>=3?1200:900);
   return st.stageResult;
 }
@@ -874,15 +1143,22 @@ function spawnEnemy(){
 
 /* ---------- helpers ---------- */
 function dist(a,b){ return Math.hypot(a.x-b.x, a.y-b.y); }
-function floatTxt(x,y,txt,col,size){ st.floats.push({x,y,txt,col,size:size||13,t:0}); }
+// P3-S4 UI:暴擊浮字視覺(size×1.4 + 紅色),集中在此處理,呼叫端只需傳非暴擊基準值 + crit 旗標即可。
+function floatTxt(x,y,txt,col,size,crit){
+  const base = size||13;
+  st.floats.push({ x, y, txt, col: crit?'#FF3B3B':col, size: crit?Math.round(base*1.4):base, t:0, crit:!!crit });
+}
 function puff(x,y,col,n){ for(let i=0;i<(n||7);i++) st.puffs.push({x,y,vx:(Math.random()-.5)*130,vy:(Math.random()-.5)*130-30,t:0,col}); }
 
 /* ---------- summon & merge ---------- */
+// 召喚費(P3-S3c/S2):倉鼠寵物+召喚費詞綴共同折抵,下限 1
+function effectiveSummonCost(){ return Math.max(1, st.summonCost - (st.buff.summonDiscount||0)); }
 function trySummon(){
-  if (st.coins < st.summonCost) { floatTxt(W/2, H-135, '金幣不夠!', '#FF7B5C', 15); beep(160,.15,'sawtooth'); return; }
+  const cost = effectiveSummonCost();
+  if (st.coins < cost) { floatTxt(W/2, H-135, '金幣不夠!', '#FF7B5C', 15); beep(160,.15,'sawtooth'); return; }
   const empty = SLOTS.filter(s=>!s.unit);
   if (!empty.length) { floatTxt(W/2, H-135, '沒空位了,先合體!', '#FF7B5C', 15); beep(160,.15,'sawtooth'); return; }
-  st.coins -= st.summonCost; st.summonCost += 2;
+  st.coins -= cost; st.summonCost += 2;
   const slot = empty[Math.floor(Math.random()*empty.length)];
   const type = pickType();
   const rar = rollRarity();
@@ -1079,17 +1355,18 @@ function update(dt){
     u.pop=Math.max(0,u.pop-dt*2);
     const T=TYPES[u.type];
     if (T.noAttack) continue; // 😇/🎵 輔助:不攻擊,只提供相鄰光環
-    // 🎵 音符攻速光環:鄰居 cd 額外乘上 (1+Σaspd),等效冷卻時間 ÷(1+Σaspd)
-    u.cd -= dt*st.buff.spd*(1+auraAspd(si));
+    // 🎵 音符攻速光環:鄰居 cd 額外乘上 (1+Σaspd),等效冷卻時間 ÷(1+Σaspd);戰靴+蜜蜂寵物疊乘 atkSpdMul(P3-S3/S2)
+    u.cd -= dt*st.buff.spd*(st.buff.atkSpdMul||1)*(1+auraAspd(si));
     if (u.cd>0) continue;
-    // 射程索敵:取「與自身歐氏距離 <= T.range」的敵人清單,每次開火隨機挑一隻;範圍內沒敵人就待機
-    const inRange = st.enemies.filter(e=>Math.hypot(e.x-s.x, e.y-s.y) <= T.range);
+    // 射程索敵:取「與自身歐氏距離 <= T.range」的敵人清單(貓頭鷹寵物 rangeMul 加成射程),每次開火隨機挑一隻;範圍內沒敵人就待機
+    const inRange = st.enemies.filter(e=>Math.hypot(e.x-s.x, e.y-s.y) <= T.range*(st.buff.rangeMul||1));
     if (!inRange.length) continue;
     const best = inRange[Math.floor(Math.random()*inRange.length)];
     u.cd=T.cd;
-    // 傷害公式:基礎 × 等級成長 × 星級倍率 × 圖騰buff × 裝備武器buff × 人物等級倍率(PLAN S2)× (1+相鄰😇輔助光環) × (1+職業羈絆加成)
+    // 傷害公式:基礎 × 等級成長 × 星級倍率 × 圖騰buff × 裝備手套buff × 小龍寵物buff × 人物等級倍率(PLAN S2)× (1+相鄰😇輔助光環) × (1+職業羈絆加成)
     const aura = auraBuff(si);
-    const dmg = T.dmg * LVL_MUL(u.lvl) * (u.mul||1) * st.buff.dmg * st.buff.gearDmg * charDmgMul(u.type) * (1+aura) * (1+st.diversity.bonus);
+    let dmg = T.dmg * LVL_MUL(u.lvl) * (u.mul||1) * st.buff.dmg * st.buff.gearDmg * (st.buff.petDmgMul||1) * charDmgMul(u.type) * (1+aura) * (1+st.diversity.bonus);
+    if (best.boss) dmg *= (1+(st.buff.bossDmgBonus||0)); // Boss 傷害詞綴(P3-S3c)
     if (T.cls==='spark'){
       // ⚡ 瞬時鋸齒閃電:無飛行時間,立即命中,視覺用 lightnings(0.1s 淡出)
       pushLightning({x1:s.x,y1:s.y-14,x2:best.x,y2:best.y,t:0,col:'#FFE97A'});
@@ -1136,18 +1413,39 @@ function elemHitFx(x,y,cls){
   else if (cls==='ice') puffN(x,y,'#9FD8FF',4,'shard');
   else if (cls==='poison') puffN(x,y,'#8FE08F',6,'drip');
 }
+// 暴擊(P3-S4):機率來自 st.buff.critChance(戒指效果值,reset() 時已夾 60% 上限);暴擊=最終傷×(2+暴傷詞綴總和)
+function rollCrit(){ return Math.random() < (st.buff.critChance||0); }
+function critMul(){ return 2 + (st.buff.critDmgBonus||0); }
 function hit(p){
   const T=TYPES[p.type];
-  damage(p.tgt,p.dmg, ELEM_COLOR[T.cls]);
+  const isCrit = rollCrit();
+  const dmg = isCrit ? p.dmg*critMul() : p.dmg;
+  damage(p.tgt,dmg, ELEM_COLOR[T.cls], isCrit);
   elemHitFx(p.tgt.x, p.tgt.y, T.cls);
-  if (T.splash){ for (const e of st.enemies){ if (e!==p.tgt && !e.dead && Math.hypot(e.x-p.tgt.x,e.y-p.tgt.y)<=T.splash) damage(e,p.dmg*(T.splashMul!=null?T.splashMul:.6), ELEM_COLOR.mage); } puffN(p.tgt.x,p.tgt.y,'#FF9C50',6,'circle'); }
-  if (T.chain){ const decay = T.chainDecay!=null?T.chainDecay:.65; let src=p.tgt,n=T.chain,dmg=p.dmg*decay,hitset=new Set([p.tgt]);
+  if (T.splash){
+    // 火蜥寵物 + 濺射範圍詞綴(P3-S2/S3c):疊加擴大濺射半徑,不影響濺射傷害比例
+    const splashR = T.splash*(1+(st.buff.splashRangeBonus||0));
+    for (const e of st.enemies){
+      if (e!==p.tgt && !e.dead && Math.hypot(e.x-p.tgt.x,e.y-p.tgt.y)<=splashR){
+        const sCrit = rollCrit();
+        const base = p.dmg*(T.splashMul!=null?T.splashMul:.6);
+        damage(e, sCrit?base*critMul():base, ELEM_COLOR.mage, sCrit);
+      }
+    }
+    puffN(p.tgt.x,p.tgt.y,'#FF9C50',6,'circle');
+  }
+  if (T.chain){
+    // 雷雀寵物連鎖傷加成(chainDmgMul)+ 連鎖跳數詞綴(chainJumpBonus)
+    const decay = T.chainDecay!=null?T.chainDecay:.65;
+    let src=p.tgt, n=T.chain+(st.buff.chainJumpBonus||0), dmg2=p.dmg*decay*(st.buff.chainDmgMul||1), hitset=new Set([p.tgt]);
     while(n-->0){ let nx=null,nd=95;
       for (const e of st.enemies){ if(!hitset.has(e)&&!e.dead){ const d=Math.hypot(e.x-src.x,e.y-src.y); if(d<nd){nd=d;nx=e;} } }
-      if(!nx)break; damage(nx,dmg,ELEM_COLOR.spark); hitset.add(nx);
+      if(!nx)break;
+      const cCrit = rollCrit();
+      damage(nx, cCrit?dmg2*critMul():dmg2, ELEM_COLOR.spark, cCrit); hitset.add(nx);
       pushLightning({x1:src.x,y1:src.y,x2:nx.x,y2:nx.y,t:0,col:'#FFE97A'});
       elemHitFx(nx.x,nx.y,'spark');
-      src=nx; dmg*=decay; }
+      src=nx; dmg2*=decay; }
   }
   if (T.slow && !p.tgt.dead) applySlow(p.tgt, p.lvl, T);
   if (T.poison && !p.tgt.dead) applyPoison(p.tgt, p.dmg, T.poisonCap, T.poisonBurst);
@@ -1191,12 +1489,14 @@ function poisonBurst(e){
   }
   floatTxt(e.x, e.y-30, '☣️ 毒爆!', '#8FE08F', 14);
 }
-function damage(e,d,col){
+function damage(e,d,col,isCrit){
   e.hp-=d;
-  floatTxt(e.x+(Math.random()*16-8), e.y-22, Math.round(d), col||'#FFF3D6', e.boss?15:12);
+  const txt = Math.round(d)+(isCrit?'!':'');
+  floatTxt(e.x+(Math.random()*16-8), e.y-22, txt, col||'#FFF3D6', e.boss?15:12, isCrit);
   if (e.hp<=0 && !e.dead){
     e.dead=true;
-    const c=Math.round((2+st.wave*.6)*(e.boss?10:1)*st.buff.coin*st.buff.gearCoin);
+    // 橘貓寵物(petCoinMul)+手環裝備(gearCoin)疊乘殺敵金
+    const c=Math.round((2+st.wave*.6)*(e.boss?10:1)*st.buff.coin*st.buff.gearCoin*(st.buff.petCoinMul||1));
     st.coins+=c;
     floatTxt(e.x,e.y-8,'+'+c+'💰','#FFC94D',e.boss?18:13);
     puff(e.x,e.y,e.boss?'#FF9C6B':'#B7E3A1',e.boss?18:8);
@@ -1206,22 +1506,26 @@ function damage(e,d,col){
 function gameOver(){
   if (st.stageMode){
     // 關卡模式失敗:無星、不計無盡模式存活波數獎勵/章節log;失敗畫面由 Step2 UI 依 st.stageResult 顯示。
+    // S5:關卡結算「勝敗皆算」,失敗分支也結算金幣。
+    const goldGained = settleGold();
     st.mode = 'stagefailed';
-    st.stageResult = { stage:st.stageMode, stars:0, reward:0, castle:st.castle, failed:true };
+    st.stageResult = { stage:st.stageMode, stars:0, reward:0, castle:st.castle, failed:true, goldGained };
     return;
   }
   st.mode='over';
   if (st.wave>st.best){ st.best=st.wave; localStorage.setItem('kdp_best',st.best); }
-  // game over 額外結算:鑽石 += floor(存活波數 × 1.5),直接存入寶庫
-  const waveBonus = Math.floor(st.wave*1.5);
+  // game over 額外結算:鑽石 += floor(存活波數 × 1.5 × 結算鑽石加成),直接存入寶庫
+  const waveBonus = Math.floor(st.wave*1.5*(st.buff.diamondMul||1));
   vault.diamonds += waveBonus; saveVault();
+  const goldGained = settleGold(); // S5:無盡 gameOver 結算金幣
+  st.goldGained = goldGained;
   document.getElementById('finalWave').textContent=st.wave;
   document.getElementById('bestLine').textContent='最佳紀錄:'+st.best+' 波';
   const listEl = document.getElementById('chapterList');
   if (listEl){
     let html = st.chapterLog.map(c=>'第'+c.chapter+'章:評級 '+c.rating+'(城堡血'+c.castle+')+'+c.reward+'💎').join('<br>');
     if (html) html += '<br>';
-    html += '存活獎勵 +'+waveBonus+'💎 ・ 目前鑽石 💎'+vault.diamonds;
+    html += '存活獎勵 +'+waveBonus+'💎 ・ 帶回金幣 +'+goldGained+'💰 ・ 目前鑽石 💎'+vault.diamonds+' ・ 金幣 💰'+vault.gold;
     listEl.innerHTML = html;
   }
   document.getElementById('over').classList.remove('hidden');
@@ -1258,10 +1562,10 @@ function draw(){
   ctx.fillStyle='#6FBF73'; rr(14,WALL_BOTTOM+1,(W-28)*Math.max(0,st.castle/st.castleMax),7,3); ctx.fill();
 
   ctx.textAlign='center'; ctx.textBaseline='middle';
-  // 已裝備寵物小圖示(寶庫裝備,開局注入),畫在牆旁
-  if (st.pet){
+  // 已裝備寵物小圖示(寶庫裝備,開局注入),畫在牆旁;P3-S2 雙寵欄,Step1 最小適配先顯示第1欄避免畫面炸掉,Step2 會改雙圖示排版
+  if (st.pet && PET_TABLE[st.pet.species]){
     ctx.font='22px serif';
-    ctx.fillText(GEAR_TABLE.pet.species[st.pet.species].icon, PET_ICON.x, PET_ICON.y);
+    ctx.fillText(PET_TABLE[st.pet.species].icon, PET_ICON.x, PET_ICON.y);
   }
 
   // 射程弧:點選單位時顯示半透明射程範圍,裁切在戰場區(避免蓋到城牆/UI)
@@ -1459,6 +1763,7 @@ function renderStageClearedBox(){
     let txt = '+'+r.reward+'💎';
     if (r.isFirstClear) txt += '(首通獎勵)';
     if (r.reachesTriple) txt += ' ・ 三星加碼!';
+    txt += ' ・ 帶回金幣 +'+r.goldGained+'💰';
     rewardEl.textContent = txt;
   }
   const nextBtn = document.getElementById('stageNextBtn');
@@ -1469,7 +1774,7 @@ function renderStageClearedBox(){
 function renderStageFailedBox(){
   const r = st.stageResult;
   const el = document.getElementById('stageFailedText');
-  if (el) el.textContent = '第 '+r.stage+' 關挑戰失敗…城堡被攻破了';
+  if (el) el.textContent = '第 '+r.stage+' 關挑戰失敗…城堡被攻破了 ・ 帶回金幣 +'+r.goldGained+'💰';
   const box = document.getElementById('stageFailedBox');
   if (box) box.classList.remove('hidden');
 }
@@ -1521,11 +1826,12 @@ function drawHud(){
 
   // bottom bar
   ctx.fillStyle='rgba(31,61,51,.85)'; rr(10,H-92,W-20,82,18); ctx.fill();
-  // summon button
-  const can = st.coins>=st.summonCost && SLOTS.some(s=>!s.unit);
+  // summon button(召喚費採 effectiveSummonCost():倉鼠寵物/詞綴折抵後的實際扣款)
+  const summonCostNow = effectiveSummonCost();
+  const can = st.coins>=summonCostNow && SLOTS.some(s=>!s.unit);
   ctx.fillStyle=can?'#FF7B5C':'#7A6E62'; rr(26,H-80,150,58,16); ctx.fill();
   ctx.fillStyle='#fff'; ctx.font='bold 19px sans-serif'; ctx.fillText('召喚英雄',101,H-58);
-  ctx.font='bold 13px sans-serif'; ctx.fillText('💰'+st.summonCost,101,H-38);
+  ctx.font='bold 13px sans-serif'; ctx.fillText('💰'+summonCostNow,101,H-38);
   // rates + pity (published, like a real gacha banner)
   ctx.textAlign='left';
   ctx.font='11.5px sans-serif';
@@ -1600,7 +1906,7 @@ function showVaultTab(tab){
   });
   document.querySelectorAll('#vaultTabs .vTab').forEach(b=>b.classList.toggle('sel', b.dataset.tab===tab));
   if (tab==='char') renderCharGrid();
-  if (tab==='pet') renderPetList();
+  if (tab==='pet'){ renderPetSlots(); renderPetPicker(); renderPetList(); }
   if (tab==='equip') renderVault();
 }
 document.querySelectorAll('#vaultTabs .vTab').forEach(b=>{
@@ -1616,12 +1922,12 @@ function resultCardHtml(r){
     title = TYPES[r.key].name;
     tag = r.unlocked ? 'NEW!' : ('+'+r.delta+' EXP');
   } else if (r.kind==='pet'){
-    icon = '<span class="ic">'+GEAR_TABLE.pet.species[r.key].icon+'</span>';
-    title = GEAR_TABLE.pet.species[r.key].name;
+    icon = '<span class="ic">'+PET_TABLE[r.key].icon+'</span>';
+    title = PET_TABLE[r.key].name;
     tag = '碎片+'+r.delta+'('+r.shards+')';
   } else {
-    icon = '<span class="ic">'+GEAR_TABLE[r.key].icon+'</span>';
-    title = GEAR_TABLE[r.key].name;
+    icon = '<span class="ic">'+EQUIP_TABLE[r.key].icon+'</span>';
+    title = EQUIP_TABLE[r.key].name;
     tag = r.equipped ? '已裝備' : ('分解+'+r.refund+'💎');
   }
   return '<div class="resultCard '+rarClass(r.rar)+'">'+icon+'<div>'+title+'</div><span class="tag">'+tag+'</span><span class="rarLbl">'+r.rar+'</span></div>';
@@ -1671,33 +1977,89 @@ function renderCharGrid(){
   });
 }
 
-// 寵物頁:3 種寵物 × 各稀有度碎片進度條,達門檻顯示「合成」按鈕(craftPet 已含裝備/分解邏輯)
+// P3-S2:被動值顯示文字(castleFlat/summonFlat 為固定量,其餘為百分比;summonFlat 語意上是扣減,顯示負號)
+function petValueTxt(species, value){
+  const kind = PET_TABLE[species].kind;
+  if (kind==='summonFlat') return '-'+value;
+  if (kind==='castleFlat') return '+'+value;
+  return '+'+Math.round(value*100)+'%';
+}
+let selectedPetSlotIdx = null; // 目前開啟選擇器的雙寵欄位(0/1),null=未開啟
+// 雙寵欄卡片:icon+稀有度+被動值;空欄顯示虛框
+function petSlotCardHtml(idx){
+  const p = vault.petSlots[idx];
+  if (!p) return '<div class="petSlotCard empty" data-idx="'+idx+'"><span class="ic">➕</span><span class="nm">空欄位</span></div>';
+  const info = PET_TABLE[p.species];
+  return '<div class="petSlotCard" data-idx="'+idx+'"><span class="ic">'+info.icon+'</span>'+
+    '<span class="nm">'+info.name+'</span><span class="rk">'+p.rarity+' ・ '+petValueTxt(p.species, p.value)+'</span></div>';
+}
+function renderPetSlots(){
+  const row = document.getElementById('petSlotsRow'); if (!row) return;
+  row.innerHTML = petSlotCardHtml(0)+petSlotCardHtml(1);
+  row.querySelectorAll('.petSlotCard').forEach(c=>{
+    c.onclick = ()=>{
+      const idx = +c.dataset.idx;
+      selectedPetSlotIdx = (selectedPetSlotIdx===idx) ? null : idx;
+      renderPetPicker();
+      beep(440,.06,'sine');
+    };
+  });
+}
+// 雙寵欄選擇器(P3-S2「點欄位可從已擁有寵物中選擇替換」):資料層僅提供 2 欄位,故「已擁有」= 目前兩欄中的寵物,
+// 可與另一欄互換,或卸下清空(騰出空欄供下次合成直接裝入新種)。直接操作 vault.petSlots(UI 交線,未觸碰 craftPet 等資料層函式)。
+function renderPetPicker(){
+  const box = document.getElementById('petPickerBox'); if (!box) return;
+  if (selectedPetSlotIdx===null){ box.innerHTML = ''; return; }
+  const idx = selectedPetSlotIdx, other = idx===0?1:0;
+  const cur = vault.petSlots[idx], otherPet = vault.petSlots[other];
+  let html = '<div class="petPicker">';
+  if (otherPet){
+    const info = PET_TABLE[otherPet.species];
+    html += '<button class="opt" id="petSwapBtn">與第'+(other+1)+'欄互換:'+info.icon+info.name+'('+otherPet.rarity+')</button>';
+  }
+  if (cur) html += '<button class="opt clearOpt" id="petClearBtn">卸下第'+(idx+1)+'欄</button>';
+  if (!otherPet && !cur) html += '<div style="font-size:11.5px;opacity:.8">兩欄皆空,請先合成寵物</div>';
+  html += '</div>';
+  box.innerHTML = html;
+  const swapBtn = document.getElementById('petSwapBtn');
+  if (swapBtn) swapBtn.onclick = ()=>{
+    const tmp = vault.petSlots[idx]; vault.petSlots[idx] = vault.petSlots[other]; vault.petSlots[other] = tmp;
+    saveVault(); selectedPetSlotIdx = null;
+    renderPetSlots(); renderPetPicker(); renderPetList();
+    vaultMsg('已互換雙寵欄位'); beep(520,.12,'triangle');
+  };
+  const clearBtn = document.getElementById('petClearBtn');
+  if (clearBtn) clearBtn.onclick = ()=>{
+    vault.petSlots[idx] = null;
+    saveVault(); selectedPetSlotIdx = null;
+    renderPetSlots(); renderPetPicker(); renderPetList();
+    vaultMsg('已卸下第'+(idx+1)+'欄寵物'); beep(300,.12,'sawtooth');
+  };
+}
+// 寵物頁:12 種寵物 × 碎片進度條,達門檻顯示「合成」按鈕(craftPet 已含裝備/分解邏輯)
 function renderPetList(){
   const list = document.getElementById('petList'); if (!list) return;
   list.innerHTML = '';
   PET_SPECIES.forEach(sp=>{
-    const info = GEAR_TABLE.pet.species[sp];
-    const equipped = vault.gear.pet && vault.gear.pet.species===sp;
+    const info = PET_TABLE[sp];
+    const slotIdx = vault.petSlots.findIndex(p=>p && p.species===sp);
+    const equipped = slotIdx>=0;
+    const have = vault.petShards[sp]||0;
+    const pct = Math.min(100, Math.round(have/PET_CRAFT_COST*100));
     const block = document.createElement('div'); block.className = 'petBlock';
-    let html = '<div class="hd"><span>'+info.icon+'</span><span>'+info.name+(equipped?'(裝備中 '+vault.gear.pet.rarity+')':'')+'</span></div>';
-    RARITY.forEach(r=>{
-      const have = (vault.petShards[sp] && vault.petShards[sp][r.key]) || 0;
-      const need = PET_SHARD_CRAFT_THRESH[r.key];
-      const pct = Math.min(100, Math.round(have/need*100));
-      html += '<div class="petRarRow"><span class="rk" style="color:'+r.col+'">'+r.key+'</span>'+
-        '<div class="prog"><i style="width:'+pct+'%;background:'+r.col+'"></i></div>'+
-        '<span class="amt">'+have+'/'+need+'</span>'+
-        (have>=need ? ('<button class="craftBtn" data-sp="'+sp+'" data-rar="'+r.key+'">合成</button>') : '')+
-        '</div>';
-    });
+    let html = '<div class="hd"><span>'+info.icon+'</span><span>'+info.name+(equipped?('(第'+(slotIdx+1)+'欄裝備中 '+vault.petSlots[slotIdx].rarity+')'):'')+'<small style="font-weight:400;display:block">'+info.desc+'</small></span></div>'+
+      '<div class="petRarRow"><div class="prog"><i style="width:'+pct+'%;background:#FFC94D"></i></div>'+
+      '<span class="amt">'+have+'/'+PET_CRAFT_COST+'</span>'+
+      (have>=PET_CRAFT_COST ? ('<button class="craftBtn" data-sp="'+sp+'">合成</button>') : '')+
+      '</div>';
     block.innerHTML = html;
     list.appendChild(block);
   });
   list.querySelectorAll('.craftBtn').forEach(b=>{
     b.onclick=()=>{
-      const res = craftPet(b.dataset.sp, b.dataset.rar);
+      const res = craftPet(b.dataset.sp);
       beep(res.ok ? (res.equipped?720:520) : 160, .15, res.ok?'triangle':'sawtooth');
-      renderPetList();
+      renderPetList(); renderPetSlots(); renderPetPicker();
     };
   });
 }
@@ -1792,11 +2154,11 @@ document.getElementById('deckBtn').onclick=()=>{
   beep(700,.14,'triangle',.06,1000);
 };
 document.getElementById('deckCloseBtn').onclick=()=>{
-  if (deck.length<6){
+  if (deck.length<DECK_SIZE){
     const extra = TYPE_KEYS.filter(k=>!deck.includes(k) && vault.charUnlock[k]);
-    while (deck.length<6 && extra.length) deck.push(extra.shift());
+    while (deck.length<DECK_SIZE && extra.length) deck.push(extra.shift());
     saveDeck();
-    deckMsg('已自動補足至 6 隻'); renderDeckGrid();
+    deckMsg('已自動補足至 '+DECK_SIZE+' 隻'); renderDeckGrid();
     setTimeout(()=>{ document.getElementById('deckBox').classList.add('hidden'); document.getElementById('menu').classList.remove('hidden'); }, 650);
     return;
   }
