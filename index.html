@@ -56,6 +56,54 @@
   .deckCard.sel{opacity:1;box-shadow:0 0 0 3px var(--gold)}
   .deckCard img{width:100%;height:52px;object-fit:contain;display:block}
   .deckCard .nm{font-size:11px;font-weight:700;margin-top:2px;color:var(--ink)}
+  .deckCard.locked{opacity:.4;cursor:pointer}
+  .deckCard.locked img{filter:grayscale(1) brightness(.45)}
+
+  /* ---- Step2 UI additions ---- */
+  .stageGrid{display:grid;grid-template-columns:repeat(5,1fr);gap:7px;width:100%;max-width:320px;max-height:52vh;overflow-y:auto;padding:2px}
+  .stageCell{background:var(--card);color:var(--ink);border-radius:10px;padding:7px 2px 5px;min-height:46px;box-sizing:border-box;display:flex;flex-direction:column;justify-content:center;text-align:center;font-size:12.5px;font-weight:800;cursor:pointer;box-shadow:0 3px 0 #C9B47E}
+  .stageCell:active{transform:translateY(2px);box-shadow:0 1px 0 #C9B47E}
+  .stageCell .stars{display:block;font-size:9.5px;color:#C9963C;margin-top:1px;letter-spacing:1px}
+  .stageCell.locked{opacity:.42;cursor:default;box-shadow:none;background:rgba(255,255,255,.14);color:var(--card)}
+  .stageCell.locked .stars{color:rgba(255,255,255,.55)}
+
+  .vaultTabs{display:flex;gap:6px;width:100%;max-width:320px}
+  .vTab{flex:1;font-family:inherit;background:rgba(255,255,255,.14);color:var(--card);border:none;border-radius:10px;
+    padding:8px 2px;font-size:12.5px;font-weight:700;cursor:pointer}
+  .vTab.sel{background:var(--gold);color:var(--ink)}
+  .vaultPane{width:100%;max-width:320px;max-height:38vh;overflow-y:auto;display:flex;flex-direction:column;gap:10px;align-items:center}
+  .vaultPane.hidden{display:none}
+  .gachaBtnRow{display:flex;gap:8px;width:100%;justify-content:center}
+  .gachaBtnRow .btn{font-size:14.5px;padding:11px 14px;letter-spacing:1px}
+  .gachaResults{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;width:100%}
+  .gachaResults.ten{grid-template-columns:repeat(5,1fr)}
+  .resultCard{background:var(--card);color:var(--ink);border-radius:10px;padding:6px 3px;text-align:center;font-size:10.5px;font-weight:700;box-shadow:0 0 0 2px #AEB9C4}
+  .resultCard img,.resultCard .ic{display:block;width:100%;height:32px;object-fit:contain;font-size:24px;line-height:32px}
+  .resultCard .tag{color:var(--coral);font-size:9.5px;display:block;margin-top:1px}
+  .resultCard .rarLbl{font-size:9px;opacity:.7;display:block}
+  .resultCard.rar-N{box-shadow:0 0 0 2px #AEB9C4}
+  .resultCard.rar-R{box-shadow:0 0 0 2px #6FBF73}
+  .resultCard.rar-SR{box-shadow:0 0 0 2px #7E8FE0}
+  .resultCard.rar-SSR{box-shadow:0 0 0 2px #FFC94D}
+
+  .charGrid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;width:100%}
+  .charCard{background:var(--card);color:var(--ink);border-radius:12px;padding:6px;text-align:center;cursor:pointer}
+  .charCard img{width:100%;height:40px;object-fit:contain;display:block}
+  .charCard .nm{font-size:10.5px;font-weight:700;margin-top:2px}
+  .charCard .lvl{font-size:9px;opacity:.8}
+  .charCard .lockIc{font-size:20px;line-height:40px}
+  .expBar{background:rgba(0,0,0,.15);border-radius:4px;height:5px;width:100%;margin-top:2px;overflow:hidden}
+  .expBar i{display:block;height:100%;background:var(--coral)}
+
+  .petList{width:100%;display:flex;flex-direction:column;gap:10px}
+  .petBlock{width:100%;background:var(--card);color:var(--ink);border-radius:12px;padding:9px 11px;text-align:left}
+  .petBlock .hd{display:flex;align-items:center;gap:8px;font-weight:800;font-size:13.5px}
+  .petRarRow{display:flex;align-items:center;gap:6px;margin-top:5px;font-size:10.5px}
+  .petRarRow .rk{width:26px;font-weight:700}
+  .petRarRow .prog{flex:1;background:rgba(0,0,0,.12);border-radius:4px;height:7px;overflow:hidden}
+  .petRarRow .prog i{display:block;height:100%}
+  .petRarRow .amt{width:44px;text-align:right}
+  .craftBtn{font-family:inherit;font-size:10.5px;font-weight:700;background:var(--coral);color:#fff;border:none;border-radius:8px;padding:3px 7px;cursor:pointer}
 </style>
 
 <div id="wrap">
@@ -68,19 +116,62 @@
       💰 點「召喚」隨機派出小英雄站上城牆<br>
       🤝 點兩隻「同類同等級」合體升級<br>
       🏰 撐越多波越厲害</div>
-    <button class="btn" id="startBtn">開 始</button>
-    <button class="btn ghost" id="vaultBtn">💎 寶庫</button>
+    <button class="btn" id="stageBtn">⚔️ 關卡</button>
+    <button class="btn ghost" id="startBtn">♾️ 無盡</button>
+    <button class="btn ghost" id="vaultBtn">🎰 寶庫</button>
     <button class="btn ghost" id="deckBtn">⚔️ 編隊</button>
   </div>
 
   <div id="vaultBox" class="overlay hidden">
-    <div class="title" style="font-size:30px">💎 寶庫</div>
+    <div class="title" style="font-size:28px">💎 寶庫</div>
     <div class="sub" id="vaultDiamonds" style="margin-top:-8px">鑽石:0</div>
-    <div class="vaultRow" id="vaultGearRow"></div>
-    <button class="btn" id="vaultDrawBtn">單抽 20💎</button>
-    <div class="sub" id="vaultRates" style="font-size:12px;opacity:.8"></div>
+    <div class="vaultTabs" id="vaultTabs">
+      <button class="vTab sel" data-tab="gacha">抽卡</button>
+      <button class="vTab" data-tab="char">角色</button>
+      <button class="vTab" data-tab="pet">寵物</button>
+      <button class="vTab" data-tab="equip">裝備</button>
+    </div>
+    <div class="vaultPane" id="vaultPaneGacha">
+      <div class="gachaBtnRow">
+        <button class="btn" id="vaultDrawBtn">單抽 20💎</button>
+        <button class="btn ghost" id="vaultDraw10Btn">十連 180💎</button>
+      </div>
+      <div class="sub" id="vaultRates" style="font-size:11.5px;opacity:.8;margin-top:0"></div>
+      <div class="gachaResults" id="gachaResults"></div>
+    </div>
+    <div class="vaultPane hidden" id="vaultPaneChar">
+      <div class="charGrid" id="charGrid"></div>
+    </div>
+    <div class="vaultPane hidden" id="vaultPanePet">
+      <div class="petList" id="petList"></div>
+    </div>
+    <div class="vaultPane hidden" id="vaultPaneEquip">
+      <div class="vaultRow" id="vaultGearRow"></div>
+    </div>
     <div class="vaultMsg" id="vaultMsg"></div>
     <button class="btn ghost" id="vaultCloseBtn">返回</button>
+  </div>
+
+  <div id="stageBox" class="overlay hidden">
+    <div class="title" style="font-size:26px">⚔️ 選擇關卡</div>
+    <div class="sub" id="stageTotalStars" style="margin-top:-8px">總星數:0 / 150</div>
+    <div class="stageGrid" id="stageGrid"></div>
+    <button class="btn ghost" id="stageCloseBtn">返回</button>
+  </div>
+
+  <div id="stageClearedBox" class="overlay hidden">
+    <div class="title" style="font-size:32px">🎉 過關!</div>
+    <div class="score" style="font-size:38px;color:var(--gold)" id="stageClearedStars">★★★</div>
+    <div class="sub" id="stageClearedReward">+0💎</div>
+    <button class="btn" id="stageNextBtn">下一關</button>
+    <button class="btn ghost" id="stageClearedMenuBtn">回選單</button>
+  </div>
+
+  <div id="stageFailedBox" class="overlay hidden">
+    <div class="title" style="font-size:32px">💥 挑戰失敗</div>
+    <div class="sub" id="stageFailedText">第 N 關挑戰失敗…</div>
+    <button class="btn" id="stageRetryBtn">再挑戰</button>
+    <button class="btn ghost" id="stageFailedMenuBtn">回選單</button>
   </div>
 
   <div id="deckBox" class="overlay hidden">
@@ -223,7 +314,8 @@ function auraBuff(i){
   let sum = 0;
   for (const j of ADJ[i]){
     const nb = SLOTS[j].unit;
-    if (nb && TYPES[nb.type] && TYPES[nb.type].auraDmg) sum += (0.10+0.06*nb.lvl)*(nb.mul||1);
+    // support 角色的持久等級(charDmgMul)同倍率作用於光環強度(PLAN S2)
+    if (nb && TYPES[nb.type] && TYPES[nb.type].auraDmg) sum += (0.10+0.06*nb.lvl)*(nb.mul||1)*charDmgMul(nb.type);
   }
   return sum * (st.buff.auraMul||1);
 }
@@ -232,7 +324,7 @@ function auraAspd(i){
   let sum = 0;
   for (const j of ADJ[i]){
     const nb = SLOTS[j].unit;
-    if (nb && TYPES[nb.type] && TYPES[nb.type].auraAspd) sum += (0.08+0.04*nb.lvl)*(nb.mul||1);
+    if (nb && TYPES[nb.type] && TYPES[nb.type].auraAspd) sum += (0.08+0.04*nb.lvl)*(nb.mul||1)*charDmgMul(nb.type);
   }
   return sum * (st.buff.auraMul||1);
 }
@@ -305,6 +397,29 @@ function deckRateLine(){
   const sum = w.reduce((a,x)=>a+x.rate,0);
   return w.map(x=>TYPES[x.key].name.slice(0,2)+Math.round(x.rate/sum*100)).join(' ');
 }
+// 編隊切換(PLAN S1 既有玩家保護 / 解鎖約束):只有 vault.charUnlock[k]===true 的角色能被加入編隊。
+// 供 UI(現有 deckCard onclick、Step2 角色頁)共用呼叫,回傳 {ok, action|msg, key}。
+function toggleDeckChar(k){
+  if (!TYPES[k]) return { ok:false, msg:'無效角色' };
+  const idx = deck.indexOf(k);
+  if (idx>=0){ deck.splice(idx,1); saveDeck(); return { ok:true, action:'removed', key:k }; }
+  if (!vault.charUnlock[k]) return { ok:false, msg:'尚未解鎖,請先抽卡取得', locked:true, key:k };
+  if (deck.length>=6) return { ok:false, msg:'已滿 6 隻,先取消一隻', key:k };
+  deck.push(k); saveDeck();
+  return { ok:true, action:'added', key:k };
+}
+// 存檔遷移保護後的保險:deck 內若仍含未解鎖角色(理論上不會發生),換成一個未在隊的已解鎖角色頂替。
+function sanitizeDeckForUnlock(){
+  let changed = false;
+  for (let i=0;i<deck.length;i++){
+    if (!vault.charUnlock[deck[i]]){
+      changed = true;
+      const cand = DEFAULT_DECK.find(k=>!deck.includes(k)) || TYPE_KEYS.find(k=>vault.charUnlock[k] && !deck.includes(k));
+      if (cand) deck[i] = cand;
+    }
+  }
+  if (changed) saveDeck();
+}
 
 /* ---------- gacha rarity (teaching: rates + pity + power) ---------- */
 // 公開機率表:總和 100。星級越高,起始等級與傷害倍率越高 → 稀有度直接換算戰力。
@@ -351,16 +466,64 @@ const VAULT_KEY = 'kdp_vault';
 function loadVault(){
   let v = null;
   try{ v = JSON.parse(localStorage.getItem(VAULT_KEY)||'null'); }catch(e){ v = null; }
-  if (!v || typeof v!=='object') v = {};
-  if (typeof v.diamonds!=='number') v.diamonds = 0;
-  if (!v.gear) v.gear = { weapon:null, charm:null, pet:null };
-  if (!v.pullCounts || typeof v.pullCounts !== 'object') v.pullCounts = { N:0, R:0, SR:0, SSR:0 };
+  if (!v || typeof v!=='object' || Array.isArray(v)) v = {};
+  if (typeof v.diamonds!=='number' || isNaN(v.diamonds)) v.diamonds = 0;
+  if (!v.gear || typeof v.gear!=='object' || Array.isArray(v.gear)) v.gear = { weapon:null, charm:null, pet:null };
+  if (!v.pullCounts || typeof v.pullCounts !== 'object' || Array.isArray(v.pullCounts)) v.pullCounts = { N:0, R:0, SR:0, SSR:0 };
   if (typeof v.gearPity!=='number') v.gearPity = 0;
   if (typeof v.firstVisit!=='boolean') v.firstVisit = false;
+
+  // --- v2 遷移(PLAN S4):角色解鎖/EXP/寵物碎片/共用抽卡保底。v!==2 視為舊檔,僅此升級一次。 ---
+  // charUnlock 型別損毀(竄改/壞檔)時視同需要重建預設解鎖,理由同遷移:寧可還原安全基準,也不能讓玩家連原6隻都不能用。
+  const needsMigration = v.v !== 2;
+  const charUnlockWasInvalid = !v.charUnlock || typeof v.charUnlock!=='object' || Array.isArray(v.charUnlock);
+  if (charUnlockWasInvalid) v.charUnlock = {};
+  if (needsMigration || charUnlockWasInvalid){
+    // 初始解鎖 = 原 6 隻;既有玩家保護:kdp_deck 內已含的角色(含新 6 隻)一併視為已解鎖
+    DEFAULT_DECK.forEach(k=>{ v.charUnlock[k] = true; });
+    let rawDeck = null;
+    try{ rawDeck = JSON.parse(localStorage.getItem(DECK_KEY)||'null'); }catch(e){ rawDeck = null; }
+    if (Array.isArray(rawDeck)) rawDeck.forEach(k=>{ if (TYPES[k]) v.charUnlock[k] = true; });
+  }
+  TYPE_KEYS.forEach(k=>{ if (typeof v.charUnlock[k]!=='boolean') v.charUnlock[k] = false; });
+
+  if (!v.charExp || typeof v.charExp!=='object' || Array.isArray(v.charExp)) v.charExp = {};
+  TYPE_KEYS.forEach(k=>{ if (typeof v.charExp[k]!=='number' || isNaN(v.charExp[k]) || v.charExp[k]<0) v.charExp[k] = 0; });
+
+  if (!v.petShards || typeof v.petShards!=='object' || Array.isArray(v.petShards)) v.petShards = {};
+  PET_SPECIES.forEach(sp=>{
+    if (!v.petShards[sp] || typeof v.petShards[sp]!=='object' || Array.isArray(v.petShards[sp])) v.petShards[sp] = {};
+    RARITY.forEach(r=>{ if (typeof v.petShards[sp][r.key]!=='number' || isNaN(v.petShards[sp][r.key]) || v.petShards[sp][r.key]<0) v.petShards[sp][r.key] = 0; });
+  });
+
+  if (typeof v.gachaPity!=='number') v.gachaPity = 0;
+
+  v.v = 2;
   return v;
 }
 function saveVault(){ localStorage.setItem(VAULT_KEY, JSON.stringify(vault)); }
 let vault = loadVault();
+// kdp_stages(PLAN S3):{ 關卡編號: 星數(0-3) },只存已挑戰過的關卡
+const STAGES_KEY = 'kdp_stages';
+function loadStages(){
+  let s = null;
+  try{ s = JSON.parse(localStorage.getItem(STAGES_KEY)||'null'); }catch(e){ s = null; }
+  if (!s || typeof s!=='object' || Array.isArray(s)) s = {};
+  Object.keys(s).forEach(k=>{
+    const n = +k;
+    if (!Number.isInteger(n) || n<1 || n>50 || typeof s[k]!=='number' || isNaN(s[k]) || s[k]<0 || s[k]>3) delete s[k];
+  });
+  return s;
+}
+function saveStages(){ localStorage.setItem(STAGES_KEY, JSON.stringify(stages)); }
+let stages = loadStages();
+// 過 N 關開 N+1 關;至少解鎖第 1 關,上限 50
+function maxUnlockedStage(){
+  let cleared = 0;
+  Object.keys(stages).forEach(k=>{ const n=+k; if ((stages[k]||0)>=1 && n>cleared) cleared = n; });
+  return Math.min(50, cleared+1);
+}
+sanitizeDeckForUnlock();
 // 「取最強」比較:星級優先,同星比數值(同欄位內部比較,pet 跨物種比較以數值當戰力代理)
 function isGearStronger(a, b){
   if (!b) return true;
@@ -372,13 +535,13 @@ function gearItemLabel(it){
   const ic = it.cat==='pet' ? GEAR_TABLE.pet.species[it.species].icon : GEAR_TABLE[it.cat].icon;
   return ic+nm+' '+it.rarity;
 }
-function gachaGear(){
-  if (vault.diamonds < GEAR_DRAW_COST){ vaultMsg('鑽石不夠!(需 '+GEAR_DRAW_COST+'💎)'); beep(160,.15,'sawtooth'); return; }
-  vault.diamonds -= GEAR_DRAW_COST;
-  const r = rollRarityGeneric(vault, 'gearPity');
+// 裝備抽卡核心(不含扣款/存檔/UI):holder[key] 帶入保底計數器,cats 決定抽卡分類池。
+// 舊版 gachaGear()(全 3 類,含 pet)與新版 drawEquip()(僅 weapon/charm)共用此核心。
+function drawGearCore(cats, holder, key){
+  const r = rollRarityGeneric(holder, key);
   vault.pullCounts[r.key] = (vault.pullCounts[r.key]||0) + 1;
   const idx = r.star - 1;
-  const cat = GEAR_CATS[Math.floor(Math.random()*GEAR_CATS.length)];
+  const cat = cats[Math.floor(Math.random()*cats.length)];
   let item;
   if (cat==='pet'){
     const sp = PET_SPECIES[Math.floor(Math.random()*PET_SPECIES.length)];
@@ -387,19 +550,153 @@ function gachaGear(){
     item = { cat, rarity:r.key, star:r.star, value:GEAR_TABLE[cat].values[idx] };
   }
   const old = vault.gear[cat];
-  let msg;
+  let equipped, refund = 0;
   if (isGearStronger(item, old)){
-    vault.gear[cat] = item;
-    if (old){ vault.diamonds += GEAR_DISASSEMBLE_REFUND; msg = '獲得 '+gearItemLabel(item)+'!舊裝備分解 +'+GEAR_DISASSEMBLE_REFUND+'💎'; }
-    else msg = '獲得 '+gearItemLabel(item)+'!已裝備';
+    vault.gear[cat] = item; equipped = true;
+    if (old) refund = GEAR_DISASSEMBLE_REFUND;
   } else {
-    vault.diamonds += GEAR_DISASSEMBLE_REFUND;
-    msg = '獲得 '+gearItemLabel(item)+',較弱,已分解 +'+GEAR_DISASSEMBLE_REFUND+'💎';
+    refund = GEAR_DISASSEMBLE_REFUND; equipped = false;
   }
+  if (refund) vault.diamonds += refund;
+  return { item, equipped, refund, rar:r.key };
+}
+// 舊版直抽裝備(含 pet 類,獨立 gearPity 保底):不再被寶庫單抽按鈕綁定,保留供相容呼叫。
+function gachaGear(){
+  if (vault.diamonds < GEAR_DRAW_COST){ vaultMsg('鑽石不夠!(需 '+GEAR_DRAW_COST+'💎)'); beep(160,.15,'sawtooth'); return; }
+  vault.diamonds -= GEAR_DRAW_COST;
+  const { item, equipped, refund } = drawGearCore(GEAR_CATS, vault, 'gearPity');
+  const msg = equipped ? ('獲得 '+gearItemLabel(item)+'!'+(refund?'舊裝備分解 +'+refund+'💎':'已裝備')) : ('獲得 '+gearItemLabel(item)+',較弱,已分解 +'+refund+'💎');
   saveVault();
   vaultMsg(msg);
   renderVault();
-  beep(r.star>=3?720:520, r.star>=3?.2:.12, 'triangle', .05, r.star>=3?1080:780);
+  beep(item.star>=3?720:520, item.star>=3?.2:.12, 'triangle', .05, item.star>=3?1080:780);
+}
+
+/* ---------- 抽卡 v2(PLAN S1):角色卡 40% / 寵物碎片 30% / 裝備 30%,共用 vault.gachaPity 保底 ---------- */
+const GACHA_COST = 20, GACHA_TEN_COST = 180;
+const GACHA_TYPE_WEIGHTS = [ {key:'char', rate:40}, {key:'petShard', rate:30}, {key:'equip', rate:30} ];
+const CHAR_EXP_ON_DUP = { N:10, R:25, SR:60, SSR:150 };
+const PET_SHARD_CRAFT_THRESH = { N:10, R:20, SR:40, SSR:80 };
+// 角色卡:12 隻均勻隨機;首抽解鎖(編隊可選),重複依稀有度轉 EXP。
+function drawCharCard(){
+  const key = TYPE_KEYS[Math.floor(Math.random()*TYPE_KEYS.length)];
+  const r = rollRarityGeneric(vault, 'gachaPity');
+  vault.pullCounts[r.key] = (vault.pullCounts[r.key]||0) + 1;
+  const name = TYPES[key].name;
+  if (!vault.charUnlock[key]){
+    vault.charUnlock[key] = true;
+    return { kind:'char', key, rar:r.key, unlocked:true, delta:0, msg:'獲得角色卡「'+name+'」('+r.key+')!已解鎖,可於編隊上場' };
+  }
+  const delta = CHAR_EXP_ON_DUP[r.key];
+  vault.charExp[key] = (vault.charExp[key]||0) + delta;
+  return { kind:'char', key, rar:r.key, unlocked:false, delta, msg:'獲得角色卡「'+name+'」('+r.key+'),重複轉換 EXP +'+delta };
+}
+// 寵物碎片:抽到隨機寵物(貓/狐/蛙)× 隨機稀有度的碎片 ×2,合成另見 craftPet()。
+function drawPetShard(){
+  const species = PET_SPECIES[Math.floor(Math.random()*PET_SPECIES.length)];
+  const r = rollRarityGeneric(vault, 'gachaPity');
+  vault.pullCounts[r.key] = (vault.pullCounts[r.key]||0) + 1;
+  const gained = 2;
+  vault.petShards[species][r.key] = (vault.petShards[species][r.key]||0) + gained;
+  const nm = GEAR_TABLE.pet.species[species].name;
+  return { kind:'pet', key:species, rar:r.key, delta:gained, shards:vault.petShards[species][r.key], msg:'獲得'+nm+' '+r.key+' 碎片 ×'+gained+'(現有 '+vault.petShards[species][r.key]+' 片)' };
+}
+// 裝備:weapon/charm 沿用 drawGearCore 內核(pet 類不在此分類池,由碎片合成取代直抽)。
+function drawEquip(){
+  const { item, equipped, refund, rar } = drawGearCore(['weapon','charm'], vault, 'gachaPity');
+  const msg = equipped ? ('獲得 '+gearItemLabel(item)+'!'+(refund?'舊裝備分解 +'+refund+'💎':'已裝備')) : ('獲得 '+gearItemLabel(item)+',較弱,已分解 +'+refund+'💎');
+  return { kind:'equip', key:item.cat, rar, star:item.star, value:item.value, equipped, refund, delta:refund, msg };
+}
+// 純擲卡核心(不扣鑽石):gachaOnce/gachaTen 共用,先擲類型(40/30/30)再擲對應分支。
+function gachaDrawCore(){
+  const type = weightedPick(GACHA_TYPE_WEIGHTS).key;
+  if (type==='char') return drawCharCard();
+  if (type==='petShard') return drawPetShard();
+  return drawEquip();
+}
+// 單抽 20💎:出貨類型 40/30/30,回傳結構化結果(供 UI 渲染:{kind,key,rar,delta,msg,...})。
+function gachaOnce(){
+  if (vault.diamonds < GACHA_COST){ vaultMsg('鑽石不夠!(需 '+GACHA_COST+'💎)'); beep(160,.15,'sawtooth'); return null; }
+  vault.diamonds -= GACHA_COST;
+  const result = gachaDrawCore();
+  saveVault();
+  vaultMsg(result.msg);
+  renderVault();
+  const rare = result.rar==='SR'||result.rar==='SSR';
+  beep(rare?720:520, rare?.2:.12, 'triangle', .05, rare?1080:780);
+  return result;
+}
+// 十連 180💎(9 折):逐次呼叫 gachaDrawCore,保底計數器(vault.gachaPity)在 10 抽間持續累計不重置,
+// 因此任何連續 10 抽必至少 1 次 SR+(≧R+)。回傳 10 筆結果陣列。
+function gachaTen(){
+  if (vault.diamonds < GACHA_TEN_COST){ vaultMsg('鑽石不夠!(需 '+GACHA_TEN_COST+'💎)'); beep(160,.15,'sawtooth'); return []; }
+  vault.diamonds -= GACHA_TEN_COST;
+  const results = [];
+  for (let i=0;i<10;i++) results.push(gachaDrawCore());
+  saveVault();
+  const rareCount = results.filter(r=>r.rar==='SR'||r.rar==='SSR').length;
+  vaultMsg('十連抽完成!('+rareCount+' 隻 SR 以上)');
+  renderVault();
+  beep(720,.25,'triangle',.06,1080);
+  return results;
+}
+// 寵物碎片合成(PLAN S1):門檻 N10/R20/SR40/SSR80,扣碎片後走「取最強/分解返 10💎」邏輯。
+function craftPet(species, rar){
+  if (!PET_SPECIES.includes(species) || !PET_SHARD_CRAFT_THRESH[rar]) return { ok:false, msg:'無效寵物或稀有度' };
+  const need = PET_SHARD_CRAFT_THRESH[rar];
+  const have = (vault.petShards[species] && vault.petShards[species][rar]) || 0;
+  if (have < need) return { ok:false, msg:'碎片不足('+have+'/'+need+')' };
+  vault.petShards[species][rar] -= need;
+  const star = RARITY.find(x=>x.key===rar).star;
+  const idx = star - 1;
+  const item = { cat:'pet', species, rarity:rar, star, value:GEAR_TABLE.pet.species[species].values[idx] };
+  const old = vault.gear.pet;
+  let equipped, refund = 0;
+  if (isGearStronger(item, old)){
+    vault.gear.pet = item; equipped = true;
+    if (old) refund = GEAR_DISASSEMBLE_REFUND;
+  } else {
+    refund = GEAR_DISASSEMBLE_REFUND; equipped = false;
+  }
+  if (refund) vault.diamonds += refund;
+  saveVault();
+  const msg = equipped ? ('合成 '+gearItemLabel(item)+' 成功!'+(refund?'舊寵物分解 +'+refund+'💎':'已裝備')) : ('合成 '+gearItemLabel(item)+',較弱,已分解 +'+refund+'💎');
+  vaultMsg(msg);
+  renderVault();
+  return { ok:true, equipped, refund, item, msg };
+}
+
+/* ---------- 人物等級系統(PLAN S2) ---------- */
+const CHAR_LVL_CAP = 20;
+// 從 lvl 升到 lvl+1 所需 EXP = round(30 × 1.25^(lvl-1))
+function charExpToNext(lvl){ return Math.round(30*Math.pow(1.25, lvl-1)); }
+// 依 vault.charExp[key] 累計 EXP 換算目前等級(1-20,滿級不再消耗多餘 EXP)
+function charLevel(key){
+  let exp = vault.charExp[key]||0, lvl = 1;
+  while (lvl < CHAR_LVL_CAP){
+    const need = charExpToNext(lvl);
+    if (exp < need) break;
+    exp -= need; lvl++;
+  }
+  return lvl;
+}
+// 供 Step2 EXP 條使用:目前等級、等級內已累積 EXP、升下一級所需 EXP(滿級為 0)
+function charLevelProgress(key){
+  let exp = vault.charExp[key]||0, lvl = 1;
+  while (lvl < CHAR_LVL_CAP){
+    const need = charExpToNext(lvl);
+    if (exp < need) break;
+    exp -= need; lvl++;
+  }
+  const need = lvl<CHAR_LVL_CAP ? charExpToNext(lvl) : 0;
+  return { lvl, exp, need };
+}
+function charMilestones(lvl){ return Math.floor(lvl/5); } // 5/10/15/20 → 1/2/3/4
+// 傷害倍率:1 + 0.02×等級 + 0.05×里程碑數(Lv5=1.15、Lv20=1.60)。掛在 gearDmg 之後乘。
+function charDmgMul(key){
+  if (!vault.charUnlock[key]) return 1; // 未解鎖角色理論上不會被召喚,防禦性回傳基準值
+  const lvl = charLevel(key);
+  return 1 + 0.02*lvl + 0.05*charMilestones(lvl);
 }
 function vaultMsg(t){ const el=document.getElementById('vaultMsg'); if (el) el.textContent = t; }
 function renderVault(){
@@ -422,12 +719,14 @@ function renderVault(){
     });
   }
   const ratesEl = document.getElementById('vaultRates');
-  if (ratesEl) ratesEl.textContent = 'N70% R22% SR6% SSR2% ・ 保底:'+(PITY-vault.gearPity)+' 抽內必出 SR+';
+  if (ratesEl) ratesEl.textContent = '角色40% 碎片30% 裝備30% ・ 保底:'+(PITY-vault.gachaPity)+' 抽內必出 SR+';
 }
 
 /* ---------- state ---------- */
 let st;
-function reset(){
+// stageMode: null=無盡模式(原樣行為不變);1-50=關卡模式(固定 10 波,波血 ×1.15^(stage-1))。
+// Step2 UI 呼叫 reset(stageNum) 進入指定關卡;reset()/reset(undefined) = 無盡模式,行為與既有版本完全一致。
+function reset(stageMode){
   // 局外裝備效果(寶庫)於開局注入:護符加城堡上限、武器加傷害乘數、寵物加對應特效
   const gWeapon = vault.gear.weapon, gCharm = vault.gear.charm, gPet = vault.gear.pet;
   const castleMax0 = 10 + (gCharm ? gCharm.value : 0);
@@ -441,7 +740,9 @@ function reset(){
     diversity:{ count:0, bonus:0 },
     chapterLog:[], chapterBanner:null,
     pet: gPet || null,
-    best: +(localStorage.getItem('kdp_best')||0)
+    best: +(localStorage.getItem('kdp_best')||0),
+    stageMode: stageMode || null,
+    stageResult: null
   };
   if (gPet && gPet.species==='fox') st.buff.frostBonus += gPet.value;
   if (gPet && gPet.species==='frog') st.buff.poisonDmgMul *= (1+gPet.value);
@@ -480,8 +781,42 @@ function settleChapter(){
   beep(rating==='S'?880:rating==='A'?700:rating==='B'?560:420, .3, 'triangle', .06, rating==='S'?1200:900);
 }
 
+/* ---------- 關卡模式結算(PLAN S3) ---------- */
+// 依通關時牆血給星:≥9 → 3 星|5-8 → 2 星|1-4 → 1 星|失敗(呼叫前提是有守住,castle<=0 由 gameOver 另外處理)→ 0 星
+function stageStars(castleHp){
+  if (castleHp>=9) return 3;
+  if (castleHp>=5) return 2;
+  if (castleHp>=1) return 1;
+  return 0;
+}
+// 第 10 波清完觸發:首通 20+關卡×2💎;首次三星額外 +15💎;非首通 = 現行章節鑽石規則(CHAPTER_DIAMONDS)減半。
+function settleStage(){
+  const stage = st.stageMode;
+  const stars = stageStars(st.castle);
+  const prevStars = stages[stage]||0;
+  const isFirstClear = prevStars===0;
+  const reachesTriple = stars>=3 && prevStars<3;
+  let reward = 0;
+  if (stars>0){
+    reward = isFirstClear ? (20+stage*2) : Math.floor(CHAPTER_DIAMONDS[chapterRating(st.castle)]/2);
+    if (reachesTriple) reward += 15;
+  }
+  if (stars>prevStars) stages[stage] = stars;
+  saveStages();
+  vault.diamonds += reward; saveVault();
+  st.mode = 'stagecleared';
+  st.stageResult = { stage, stars, reward, castle:st.castle, isFirstClear, reachesTriple };
+  beep(stars>=3?880:stars===2?700:560, .3, 'triangle', .06, stars>=3?1200:900);
+  return st.stageResult;
+}
+
 /* ---------- waves ---------- */
 function waveHp(w){ return 8*Math.pow(1.33,w); }
+// 關卡模式波血係數:×1.15^(關卡-1)(無盡模式 stageMode=null 時原樣不變)
+function effectiveWaveHp(w){
+  const base = waveHp(w);
+  return st.stageMode ? base*Math.pow(1.15, st.stageMode-1) : base;
+}
 function startWave(){
   st.wave++; st.inWave = true;
   st.waveLeft = Math.min(6 + st.wave*2, 34);
@@ -490,7 +825,7 @@ function startWave(){
 }
 function spawnEnemy(){
   const boss = (st.wave % 5 === 0 && st.waveLeft === 1);
-  const hp = waveHp(st.wave) * (boss?12:1);
+  const hp = effectiveWaveHp(st.wave) * (boss?12:1);
   st.enemies.push({
     x: 20+Math.random()*(W-40), y:-30, hp, maxHp:hp,
     speed:(38 + Math.min(st.wave*1.2, 30)) * (boss?.6:1),
@@ -605,8 +940,14 @@ function update(dt){
       const bonus=Math.round((14+st.wave*2)*st.buff.coin);
       st.coins+=bonus; floatTxt(W/2,300,'波次獎勵 +'+bonus+' 💰','#FFC94D',17);
       beep(560,.2,'triangle',.05,840);
-      if (st.wave%5===0) offerTotems();
-      if (st.wave%10===0) settleChapter();
+      if (st.stageMode){
+        // 關卡模式:固定 10 波,第 10 波清完直接結算(不進入無盡章節評級),期間仍照樣提供圖騰
+        if (st.wave>=10){ settleStage(); }
+        else if (st.wave%5===0) offerTotems();
+      } else {
+        if (st.wave%5===0) offerTotems();
+        if (st.wave%10===0) settleChapter();
+      }
     }
   } else {
     st.betweenT-=dt;
@@ -665,9 +1006,9 @@ function update(dt){
     if (!inRange.length) continue;
     const best = inRange[Math.floor(Math.random()*inRange.length)];
     u.cd=T.cd;
-    // 傷害公式:基礎 × 等級成長 × 星級倍率 × 圖騰buff × 裝備武器buff × (1+相鄰😇輔助光環) × (1+職業羈絆加成)
+    // 傷害公式:基礎 × 等級成長 × 星級倍率 × 圖騰buff × 裝備武器buff × 人物等級倍率(PLAN S2)× (1+相鄰😇輔助光環) × (1+職業羈絆加成)
     const aura = auraBuff(si);
-    const dmg = T.dmg * LVL_MUL(u.lvl) * (u.mul||1) * st.buff.dmg * st.buff.gearDmg * (1+aura) * (1+st.diversity.bonus);
+    const dmg = T.dmg * LVL_MUL(u.lvl) * (u.mul||1) * st.buff.dmg * st.buff.gearDmg * charDmgMul(u.type) * (1+aura) * (1+st.diversity.bonus);
     if (T.cls==='spark'){
       // ⚡ 瞬時鋸齒閃電:無飛行時間,立即命中,視覺用 lightnings(0.1s 淡出)
       pushLightning({x1:s.x,y1:s.y-14,x2:best.x,y2:best.y,t:0,col:'#FFE97A'});
@@ -782,6 +1123,12 @@ function damage(e,d,col){
   }
 }
 function gameOver(){
+  if (st.stageMode){
+    // 關卡模式失敗:無星、不計無盡模式存活波數獎勵/章節log;失敗畫面由 Step2 UI 依 st.stageResult 顯示。
+    st.mode = 'stagefailed';
+    st.stageResult = { stage:st.stageMode, stars:0, reward:0, castle:st.castle, failed:true };
+    return;
+  }
   st.mode='over';
   if (st.wave>st.best){ st.best=st.wave; localStorage.setItem('kdp_best',st.best); }
   // game over 額外結算:鑽石 += floor(存活波數 × 1.5),直接存入寶庫
@@ -1016,13 +1363,57 @@ function draw(){
   }
 
   ctx.restore();
+  syncStageOverlays();
+}
+
+// 關卡模式勝負畫面(PLAN S3 UI):settleStage()/gameOver() 只設定 st.mode/st.stageResult(資料層,不可改),
+// 這裡在每幀 draw() 尾端輪詢狀態變化,首次偵測到才渲染+顯示對應 overlay,避免每幀重覆渲染。
+let stageOverlayShown = null;
+function renderStageClearedBox(){
+  const r = st.stageResult;
+  const starsEl = document.getElementById('stageClearedStars');
+  if (starsEl) starsEl.textContent = '★'.repeat(r.stars)+'☆'.repeat(3-r.stars);
+  const rewardEl = document.getElementById('stageClearedReward');
+  if (rewardEl){
+    let txt = '+'+r.reward+'💎';
+    if (r.isFirstClear) txt += '(首通獎勵)';
+    if (r.reachesTriple) txt += ' ・ 三星加碼!';
+    rewardEl.textContent = txt;
+  }
+  const nextBtn = document.getElementById('stageNextBtn');
+  if (nextBtn) nextBtn.style.display = (r.stage<50) ? '' : 'none';
+  const box = document.getElementById('stageClearedBox');
+  if (box) box.classList.remove('hidden');
+}
+function renderStageFailedBox(){
+  const r = st.stageResult;
+  const el = document.getElementById('stageFailedText');
+  if (el) el.textContent = '第 '+r.stage+' 關挑戰失敗…城堡被攻破了';
+  const box = document.getElementById('stageFailedBox');
+  if (box) box.classList.remove('hidden');
+}
+function syncStageOverlays(){
+  if (st.mode==='stagecleared'){
+    if (stageOverlayShown!=='cleared'){ stageOverlayShown='cleared'; renderStageClearedBox(); }
+  } else if (st.mode==='stagefailed'){
+    if (stageOverlayShown!=='failed'){ stageOverlayShown='failed'; renderStageFailedBox(); }
+  } else {
+    stageOverlayShown = null;
+  }
 }
 
 function drawHud(){
   // top bar
   ctx.fillStyle='rgba(31,61,51,.85)'; rr(10,10,W-20,44,14); ctx.fill();
   ctx.textAlign='left'; ctx.fillStyle='#FFF9EA'; ctx.font='bold 16px sans-serif';
-  const waveTxt = st.inWave ? '第 '+st.wave+' 波' : (st.wave===0?'準備中…':'第 '+(st.wave+1)+' 波 即將來襲');
+  // 關卡模式:HUD 頂部顯示「第 N 關|波 x/10」;無盡模式原樣不變(PLAN S3 UI)
+  let waveTxt;
+  if (st.stageMode){
+    const waveNum = st.inWave ? st.wave : Math.min(st.wave+1, 10);
+    waveTxt = '第'+st.stageMode+'關 ・ 波 '+waveNum+'/10';
+  } else {
+    waveTxt = st.inWave ? '第 '+st.wave+' 波' : (st.wave===0?'準備中…':'第 '+(st.wave+1)+' 波 即將來襲');
+  }
   ctx.fillText('🌊 '+waveTxt, 24, 32);
   ctx.textAlign='right';
   ctx.fillStyle='#FFC94D'; ctx.fillText('💰 '+st.coins, W-24, 32);
@@ -1090,6 +1481,8 @@ document.getElementById('vaultBtn').onclick=()=>{
     vault.firstVisit = true; vault.diamonds += VAULT_FIRST_VISIT_BONUS; saveVault();
     vaultMsg('首次進入寶庫,贈送 '+VAULT_FIRST_VISIT_BONUS+'💎!');
   } else vaultMsg('');
+  document.getElementById('gachaResults').innerHTML = '';
+  showVaultTab('gacha');
   renderVault();
   document.getElementById('vaultBox').classList.remove('hidden');
   beep(700,.14,'triangle',.06,1000);
@@ -1098,23 +1491,194 @@ document.getElementById('vaultCloseBtn').onclick=()=>{
   document.getElementById('vaultBox').classList.add('hidden');
   document.getElementById('menu').classList.remove('hidden');
 };
-document.getElementById('vaultDrawBtn').onclick=()=>gachaGear();
+
+/* ---------- 寶庫四分頁(PLAN S1 UI):抽卡|角色|寵物|裝備 ---------- */
+const VAULT_TAB_IDS = { gacha:'vaultPaneGacha', char:'vaultPaneChar', pet:'vaultPanePet', equip:'vaultPaneEquip' };
+function showVaultTab(tab){
+  Object.keys(VAULT_TAB_IDS).forEach(t=>{
+    const el = document.getElementById(VAULT_TAB_IDS[t]);
+    if (el) el.classList.toggle('hidden', t!==tab);
+  });
+  document.querySelectorAll('#vaultTabs .vTab').forEach(b=>b.classList.toggle('sel', b.dataset.tab===tab));
+  if (tab==='char') renderCharGrid();
+  if (tab==='pet') renderPetList();
+  if (tab==='equip') renderVault();
+}
+document.querySelectorAll('#vaultTabs .vTab').forEach(b=>{
+  b.onclick=()=>{ showVaultTab(b.dataset.tab); beep(440,.06,'sine'); };
+});
+
+// 抽卡結果卡片渲染:char=NEW!/+EXP、pet=碎片數、equip=已裝備/分解返鑽
+function rarClass(rar){ return 'rar-'+rar; }
+function resultCardHtml(r){
+  let icon, title, tag;
+  if (r.kind==='char'){
+    icon = '<img src="'+SPRITES[r.key]+'">';
+    title = TYPES[r.key].name;
+    tag = r.unlocked ? 'NEW!' : ('+'+r.delta+' EXP');
+  } else if (r.kind==='pet'){
+    icon = '<span class="ic">'+GEAR_TABLE.pet.species[r.key].icon+'</span>';
+    title = GEAR_TABLE.pet.species[r.key].name;
+    tag = '碎片+'+r.delta+'('+r.shards+')';
+  } else {
+    icon = '<span class="ic">'+GEAR_TABLE[r.key].icon+'</span>';
+    title = GEAR_TABLE[r.key].name;
+    tag = r.equipped ? '已裝備' : ('分解+'+r.refund+'💎');
+  }
+  return '<div class="resultCard '+rarClass(r.rar)+'">'+icon+'<div>'+title+'</div><span class="tag">'+tag+'</span><span class="rarLbl">'+r.rar+'</span></div>';
+}
+function renderGachaResults(results){
+  const box = document.getElementById('gachaResults');
+  if (!box) return;
+  box.classList.toggle('ten', results.length>1);
+  box.innerHTML = results.map(resultCardHtml).join('');
+}
+document.getElementById('vaultDrawBtn').onclick=()=>{
+  const r = gachaOnce();
+  if (r) renderGachaResults([r]);
+};
+document.getElementById('vaultDraw10Btn').onclick=()=>{
+  const rs = gachaTen();
+  if (rs.length) renderGachaResults(rs);
+};
+
+// 角色頁:12 卡(立繪/名字/職業/Lv/EXP 條);未解鎖=立繪灰階+🔒,點擊提示抽卡解鎖
+function renderCharGrid(){
+  const grid = document.getElementById('charGrid'); if (!grid) return;
+  grid.innerHTML = '';
+  TYPE_KEYS.forEach(k=>{
+    const T = TYPES[k];
+    const unlocked = vault.charUnlock[k];
+    const card = document.createElement('div');
+    card.className = 'charCard'+(unlocked?'':' locked');
+    if (unlocked){
+      const prog = charLevelProgress(k);
+      const pct = prog.need ? Math.round(prog.exp/prog.need*100) : 100;
+      card.innerHTML = '<img src="'+SPRITES[k]+'"><div class="nm">'+T.name+'</div>'+
+        '<div class="lvl">'+T.cls+' ・ Lv'+prog.lvl+(prog.lvl>=CHAR_LVL_CAP?'(滿)':'')+'</div>'+
+        '<div class="expBar"><i style="width:'+pct+'%"></i></div>';
+      card.onclick=()=>{
+        const mul = charDmgMul(k);
+        vaultMsg(T.name+' 目前傷害加成 ×'+mul.toFixed(2)+'(Lv'+prog.lvl+')');
+      };
+    } else {
+      card.innerHTML = '<img src="'+SPRITES[k]+'" style="filter:grayscale(1) brightness(.35)">'+
+        '<div class="nm">🔒 ???</div><div class="lvl">未解鎖</div>';
+      card.onclick=()=>{ vaultMsg('尚未解鎖「'+T.name+'」,請抽卡取得'); beep(160,.12,'sawtooth'); };
+    }
+    grid.appendChild(card);
+  });
+}
+
+// 寵物頁:3 種寵物 × 各稀有度碎片進度條,達門檻顯示「合成」按鈕(craftPet 已含裝備/分解邏輯)
+function renderPetList(){
+  const list = document.getElementById('petList'); if (!list) return;
+  list.innerHTML = '';
+  PET_SPECIES.forEach(sp=>{
+    const info = GEAR_TABLE.pet.species[sp];
+    const equipped = vault.gear.pet && vault.gear.pet.species===sp;
+    const block = document.createElement('div'); block.className = 'petBlock';
+    let html = '<div class="hd"><span>'+info.icon+'</span><span>'+info.name+(equipped?'(裝備中 '+vault.gear.pet.rarity+')':'')+'</span></div>';
+    RARITY.forEach(r=>{
+      const have = (vault.petShards[sp] && vault.petShards[sp][r.key]) || 0;
+      const need = PET_SHARD_CRAFT_THRESH[r.key];
+      const pct = Math.min(100, Math.round(have/need*100));
+      html += '<div class="petRarRow"><span class="rk" style="color:'+r.col+'">'+r.key+'</span>'+
+        '<div class="prog"><i style="width:'+pct+'%;background:'+r.col+'"></i></div>'+
+        '<span class="amt">'+have+'/'+need+'</span>'+
+        (have>=need ? ('<button class="craftBtn" data-sp="'+sp+'" data-rar="'+r.key+'">合成</button>') : '')+
+        '</div>';
+    });
+    block.innerHTML = html;
+    list.appendChild(block);
+  });
+  list.querySelectorAll('.craftBtn').forEach(b=>{
+    b.onclick=()=>{
+      const res = craftPet(b.dataset.sp, b.dataset.rar);
+      beep(res.ok ? (res.equipped?720:520) : 160, .15, res.ok?'triangle':'sawtooth');
+      renderPetList();
+    };
+  });
+}
+
+/* ---------- 選關頁(PLAN S3 UI):5x10 網格,鎖定灰階,點可玩關卡進入 ---------- */
+function stageStarsDisplay(n){
+  const s = stages[n]||0;
+  let str=''; for (let i=0;i<3;i++) str += i<s ? '★' : '☆';
+  return str;
+}
+function totalStars(){
+  let sum = 0; Object.keys(stages).forEach(k=>{ sum += stages[k]||0; });
+  return sum;
+}
+function renderStageGrid(){
+  const grid = document.getElementById('stageGrid'); if (!grid) return;
+  grid.innerHTML = '';
+  const maxU = maxUnlockedStage();
+  for (let n=1; n<=50; n++){
+    const locked = n>maxU;
+    const cell = document.createElement('div');
+    cell.className = 'stageCell'+(locked?' locked':'');
+    cell.innerHTML = (locked?'🔒':n) + '<span class="stars">'+(locked?'':stageStarsDisplay(n))+'</span>';
+    if (!locked){
+      cell.onclick=()=>{
+        document.getElementById('stageBox').classList.add('hidden');
+        reset(n); st.mode='play';
+        beep(660,.15,'triangle',.06,990);
+      };
+    }
+    grid.appendChild(cell);
+  }
+  const tEl = document.getElementById('stageTotalStars');
+  if (tEl) tEl.textContent = '總星數:'+totalStars()+' / 150';
+}
+document.getElementById('stageBtn').onclick=()=>{
+  document.getElementById('menu').classList.add('hidden');
+  renderStageGrid();
+  document.getElementById('stageBox').classList.remove('hidden');
+  beep(700,.14,'triangle',.06,1000);
+};
+document.getElementById('stageCloseBtn').onclick=()=>{
+  document.getElementById('stageBox').classList.add('hidden');
+  document.getElementById('menu').classList.remove('hidden');
+};
+
+/* ---------- 關卡勝負畫面按鈕(PLAN S3 UI) ---------- */
+document.getElementById('stageNextBtn').onclick=()=>{
+  const next = st.stageResult.stage+1;
+  document.getElementById('stageClearedBox').classList.add('hidden');
+  reset(next); st.mode='play';
+  beep(660,.15,'triangle',.06,990);
+};
+document.getElementById('stageClearedMenuBtn').onclick=()=>{
+  document.getElementById('stageClearedBox').classList.add('hidden');
+  st.mode='menu';
+  document.getElementById('menu').classList.remove('hidden');
+};
+document.getElementById('stageRetryBtn').onclick=()=>{
+  const stage = st.stageResult.stage;
+  document.getElementById('stageFailedBox').classList.add('hidden');
+  reset(stage); st.mode='play';
+  beep(660,.15,'triangle',.06,990);
+};
+document.getElementById('stageFailedMenuBtn').onclick=()=>{
+  document.getElementById('stageFailedBox').classList.add('hidden');
+  st.mode='menu';
+  document.getElementById('menu').classList.remove('hidden');
+};
 function deckMsg(t){ const el=document.getElementById('deckMsg'); if (el) el.textContent=t; }
 function renderDeckGrid(){
   const grid=document.getElementById('deckGrid'); if(!grid) return;
   grid.innerHTML='';
   TYPE_KEYS.forEach(k=>{
     const T=TYPES[k];
-    const card=document.createElement('div'); card.className='deckCard'+(deck.includes(k)?' sel':'');
-    card.innerHTML='<img src="'+SPRITES[k]+'"><div class="nm">'+T.name+'</div>';
+    const unlocked = vault.charUnlock[k];
+    const card=document.createElement('div'); card.className='deckCard'+(deck.includes(k)?' sel':'')+(unlocked?'':' locked');
+    card.innerHTML='<img src="'+SPRITES[k]+'"><div class="nm">'+(unlocked?T.name:'🔒 '+T.name)+'</div>';
     card.onclick=()=>{
-      const idx=deck.indexOf(k);
-      if (idx>=0){ deck.splice(idx,1); }
-      else {
-        if (deck.length>=6){ deckMsg('已滿 6 隻,先取消一隻'); beep(160,.12,'sawtooth'); return; }
-        deck.push(k);
-      }
-      saveDeck(); renderDeckGrid(); deckMsg('');
+      const r = toggleDeckChar(k);
+      if (!r.ok){ deckMsg(r.msg); beep(160,.12,'sawtooth'); return; }
+      renderDeckGrid(); deckMsg('');
       beep(440,.06,'sine');
     };
     grid.appendChild(card);
@@ -1128,7 +1692,7 @@ document.getElementById('deckBtn').onclick=()=>{
 };
 document.getElementById('deckCloseBtn').onclick=()=>{
   if (deck.length<6){
-    const extra = TYPE_KEYS.filter(k=>!deck.includes(k));
+    const extra = TYPE_KEYS.filter(k=>!deck.includes(k) && vault.charUnlock[k]);
     while (deck.length<6 && extra.length) deck.push(extra.shift());
     saveDeck();
     deckMsg('已自動補足至 6 隻'); renderDeckGrid();
