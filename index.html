@@ -138,6 +138,11 @@
       </div>
       <div class="sub" id="vaultRates" style="font-size:11.5px;opacity:.8;margin-top:0"></div>
       <div class="gachaResults" id="gachaResults"></div>
+      <div class="gachaBtnRow" style="margin-top:2px">
+        <input type="text" id="redeemInput" placeholder="輸入兌換碼" autocomplete="off"
+          style="flex:1;min-width:0;height:40px;box-sizing:border-box;font-family:inherit;font-size:13px;padding:0 12px;border:none;outline:none;border-radius:999px;background:var(--card);color:var(--ink)">
+        <button class="btn ghost" id="redeemBtn" style="padding:11px 20px;font-size:13.5px">兌換</button>
+      </div>
     </div>
     <div class="vaultPane hidden" id="vaultPaneChar">
       <div class="charGrid" id="charGrid"></div>
@@ -188,6 +193,13 @@
     <div class="totem-row" id="totemRow"></div>
   </div>
 
+  <div id="pauseBox" class="overlay hidden">
+    <div class="title" style="font-size:32px">⏸ 暫停中</div>
+    <button class="btn" id="pauseResumeBtn">▶ 繼續</button>
+    <button class="btn ghost" id="pauseRetryBtn">🔄 重新挑戰</button>
+    <button class="btn ghost" id="pauseLeaveBtn">🏠 離開對局</button>
+  </div>
+
   <div id="over" class="overlay hidden">
     <div class="title" style="font-size:36px">城堡淪陷…</div>
     <div class="score">你守住了 <b id="finalWave">0</b> 波<br><span id="bestLine" style="font-size:14px;opacity:.85"></span></div>
@@ -201,6 +213,8 @@
 "use strict";
 const cv = document.getElementById('cv'), ctx = cv.getContext('2d');
 const W = 420, H = 760;
+// HUD 右上角 ⏸ 暫停按鈕座標(canvas 內繪製+點擊判定共用同一組常數)
+const PAUSE_BTN = { x: W-24, y: 32, r: 14 };
 
 /* ---------- audio ---------- */
 let AC = null, muted = false;
@@ -499,6 +513,9 @@ function loadVault(){
 
   if (typeof v.gachaPity!=='number') v.gachaPity = 0;
 
+  // redeemed[]:記錄已兌換過的「非 unlimited」兌換碼(供日後限次兌換碼查重用);目前 REDEEM_CODES 全為 unlimited,本欄位暫不影響任何邏輯。
+  if (!v.redeemed || !Array.isArray(v.redeemed)) v.redeemed = [];
+
   v.v = 2;
   return v;
 }
@@ -723,6 +740,26 @@ function renderVault(){
   if (ratesEl) ratesEl.textContent = '角色40% 碎片30% 裝備30% ・ 保底:'+(PITY-vault.gachaPity)+' 抽內必出 SR+';
 }
 
+/* ---------- 兌換碼 ---------- */
+// 兌換碼表(常數,方便日後加碼):unlimited=true 表示不限次數,每次兌換都給獎勵;
+// 非 unlimited 的碼(目前未使用)會在成功兌換後寫入 vault.redeemed[] 供查重,結構已預留。
+const REDEEM_CODES = { vip999: { diamonds:10000, unlimited:true } };
+function redeemCode(raw){
+  const code = (raw||'').trim().toLowerCase();
+  if (!code) return;
+  const def = REDEEM_CODES[code];
+  if (!def){ vaultMsg('無效的兌換碼'); beep(160,.15,'sawtooth'); return; }
+  if (!def.unlimited){
+    if (vault.redeemed.includes(code)){ vaultMsg('此兌換碼已使用過'); beep(160,.15,'sawtooth'); return; }
+    vault.redeemed.push(code);
+  }
+  vault.diamonds += def.diamonds;
+  saveVault();
+  renderVault();
+  vaultMsg('兌換成功!+'+def.diamonds+'💎');
+  beep(720,.2,'triangle',.05,1080);
+}
+
 /* ---------- state ---------- */
 let st;
 // stageMode: null=無盡模式(原樣行為不變);1-50=關卡模式(固定 10 波,波血 ×1.15^(stage-1))。
@@ -913,6 +950,49 @@ function offerTotems(){
   });
   document.getElementById('totemBox').classList.remove('hidden');
 }
+
+/* ---------- 暫停/離開對局 ---------- */
+// mode 一旦切成 'paused',update() 首行 if(st.mode!=='play') return 會自然凍結敵人/波次/城堡血;
+// draw() 不檢查 mode,照樣渲染最後一幀畫面,暫停 overlay(不透明背景)蓋在上面。
+function renderPauseBox(){
+  const retryBtn = document.getElementById('pauseRetryBtn');
+  if (retryBtn) retryBtn.style.display = st.stageMode ? '' : 'none';
+}
+function pauseGame(){
+  if (st.mode!=='play') return;
+  st.mode = 'paused';
+  renderPauseBox();
+  document.getElementById('pauseBox').classList.remove('hidden');
+  beep(440,.1,'sine');
+}
+function resumeGame(){
+  if (st.mode!=='paused') return;
+  st.mode = 'play';
+  document.getElementById('pauseBox').classList.add('hidden');
+  beep(660,.12,'triangle',.06,900);
+}
+// 離開對局:回主選單,不結算、不給任何獎勵(無盡/關卡模式皆同)
+function leaveMatch(){
+  document.getElementById('pauseBox').classList.add('hidden');
+  st.mode = 'menu';
+  document.getElementById('menu').classList.remove('hidden');
+}
+// 重新挑戰(僅關卡模式暫停頁顯示):reset 同一關,不計本次失敗
+function retryFromPause(){
+  const stage = st.stageMode;
+  document.getElementById('pauseBox').classList.add('hidden');
+  reset(stage); st.mode = 'play';
+  beep(660,.15,'triangle',.06,990);
+}
+document.getElementById('pauseResumeBtn').onclick = resumeGame;
+document.getElementById('pauseLeaveBtn').onclick = leaveMatch;
+document.getElementById('pauseRetryBtn').onclick = retryFromPause;
+document.addEventListener('keydown', e=>{
+  if (e.key==='Escape'){
+    if (st.mode==='play') pauseGame();
+    else if (st.mode==='paused') resumeGame();
+  }
+});
 
 /* ---------- update ---------- */
 function update(dt){
@@ -1417,8 +1497,18 @@ function drawHud(){
   }
   ctx.fillText('🌊 '+waveTxt, 24, 32);
   ctx.textAlign='right';
-  ctx.fillStyle='#FFC94D'; ctx.fillText('💰 '+st.coins, W-24, 32);
+  ctx.fillStyle='#FFC94D'; ctx.fillText('💰 '+st.coins, W-52, 32);
   ctx.textAlign='center';
+
+  // ⏸ 暫停按鈕(HUD 右上角,對局中才畫;不擋波次/鑽石文字,座標見 PAUSE_BTN)
+  // textBaseline 沿用 draw() 頂部設的 'middle',此處不覆寫以免影響後續(章節橫幅等)文字對齊
+  if (st.mode==='play'){
+    ctx.beginPath(); ctx.arc(PAUSE_BTN.x, PAUSE_BTN.y, PAUSE_BTN.r, 0, 7);
+    ctx.fillStyle='rgba(0,0,0,.28)'; ctx.fill();
+    ctx.fillStyle='#FFF9EA'; ctx.font='bold 15px sans-serif';
+    ctx.textAlign='center';
+    ctx.fillText('⏸', PAUSE_BTN.x, PAUSE_BTN.y+1);
+  }
 
   // 職業羈絆徽章:場上兵種種類達門檻才顯示
   if (st.diversity && st.diversity.bonus>0){
@@ -1458,9 +1548,12 @@ function toXY(ev){
   return { x:(p.clientX-r.left)/r.width*W, y:(p.clientY-r.top)/r.height*H };
 }
 function tap(ev){
+  const {x,y}=toXY(ev);
+  if (st.mode==='play' && Math.hypot(x-PAUSE_BTN.x,y-PAUSE_BTN.y)<=PAUSE_BTN.r+6){
+    ev.preventDefault(); pauseGame(); return;
+  }
   if (st.mode!=='play') return;
   ev.preventDefault();
-  const {x,y}=toXY(ev);
   if (x>26&&x<176&&y>H-80&&y<H-22){ trySummon(); return; }
   let hit=-1,hd=40;
   SLOTS.forEach((s,i)=>{ const d=Math.hypot(s.x-x,s.y-y); if(d<hd){hd=d;hit=i;} });
@@ -1547,6 +1640,8 @@ document.getElementById('vaultDraw10Btn').onclick=()=>{
   const rs = gachaTen();
   if (rs.length) renderGachaResults(rs);
 };
+document.getElementById('redeemBtn').onclick=()=>{ redeemCode(document.getElementById('redeemInput').value); };
+document.getElementById('redeemInput').addEventListener('keydown', e=>{ if (e.key==='Enter') redeemCode(e.target.value); });
 
 // 角色頁:12 卡(立繪/名字/職業/Lv/EXP 條);未解鎖=立繪灰階+🔒,點擊提示抽卡解鎖
 function renderCharGrid(){
