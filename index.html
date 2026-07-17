@@ -116,21 +116,48 @@ function beep(f, dur, type, vol, slide){
 const WALL_TOP = 600, WALL_BOTTOM = 660;
 const SLOT_Y = 628;
 const PET_ICON = { x: W-18, y: WALL_TOP-14 };
-const SLOTS = Array.from({length:8}, (_,i)=>({
-  x: (W/8)*(i+0.5), y: SLOT_Y, unit: null
-}));
-// 8 槽位鄰接表:橫排一列,鄰接 = 左右相鄰索引(index±1)。
-// 用於 😇 輔助光環判定「相鄰槽位」。
-const ADJ = [
-  [1],         // 0
-  [0,2],       // 1
-  [1,3],       // 2
-  [2,4],       // 3
-  [3,5],       // 4
-  [4,6],       // 5
-  [5,7],       // 6
-  [6]          // 7
-];
+const BASE_SLOTS = 8, MAX_SLOTS = 10;
+// 槽位鄰接表產生器:橫排一列,鄰接 = 左右相鄰索引(index±1)。
+// 用於 😇 輔助光環判定「相鄰槽位」;擴格/reset 時重建。
+function buildAdj(n){
+  return Array.from({length:n}, (_,i)=>{
+    const a=[]; if(i>0) a.push(i-1); if(i<n-1) a.push(i+1); return a;
+  });
+}
+function makeSlots(n){
+  return Array.from({length:n}, (_,i)=>({ x:(W/n)*(i+0.5), y:SLOT_Y, unit:null }));
+}
+let SLOTS = makeSlots(BASE_SLOTS);
+let ADJ = buildAdj(BASE_SLOTS);
+// 槽位全滿 + 不存在任何可合成對(同 type、同 lvl、lvl<6)時視為卡死。
+// isDeadlocked() 呼叫前提是至少已知全滿(內部仍會再檢查一次,雙重保險)。
+function isDeadlocked(){
+  if (SLOTS.some(s=>!s.unit)) return false;
+  for (let i=0;i<SLOTS.length;i++){
+    const a = SLOTS[i].unit;
+    if (a.lvl>=6) continue;
+    for (let j=i+1;j<SLOTS.length;j++){
+      const b = SLOTS[j].unit;
+      if (b.type===a.type && b.lvl===a.lvl) return false;
+    }
+  }
+  return true;
+}
+// 卡死時擴增一個空槽(防卡死自動擴格):x 全部重排、ADJ 重建,上限 MAX_SLOTS。
+function relayoutSlots(){
+  const n = SLOTS.length;
+  SLOTS.forEach((s,i)=>{ s.x = (W/n)*(i+0.5); });
+  ADJ = buildAdj(n);
+}
+function grantExtraSlot(){
+  if (SLOTS.length >= MAX_SLOTS) return false;
+  SLOTS.push({ x:0, y:SLOT_Y, unit:null });
+  relayoutSlots();
+  floatTxt(W/2, SLOT_Y-66, '🧱 牆面擴建!+1 格', '#FFC94D', 15);
+  puff(W/2, SLOT_Y-40, '#FFC94D', 10);
+  beep(880,.22,'triangle',.06,1200);
+  return true;
+}
 function auraBuff(i){
   let sum = 0;
   for (const j of ADJ[i]){
@@ -310,7 +337,7 @@ function reset(){
     mode:'menu', t:0, wave:0, castle:castleMax0, castleMax:castleMax0, coins:30, summonCost:10,
     enemies:[], projs:[], floats:[], puffs:[],
     waveLeft:0, spawnT:0, betweenT:2, inWave:false,
-    sel:-1, shake:0, pity:0,
+    sel:-1, shake:0, pity:0, deadlockT:0,
     buff:{ dmg:1, spd:1, coin:1, frostCap:.55, frostBonus:0, poisonCapBonus:0, poisonDmgMul:1, auraMul:1,
            gearDmg: gWeapon ? (1+gWeapon.value) : 1, gearCoin: (gPet && gPet.species==='cat') ? (1+gPet.value) : 1 },
     diversity:{ count:0, bonus:0 },
@@ -320,7 +347,8 @@ function reset(){
   };
   if (gPet && gPet.species==='fox') st.buff.frostBonus += gPet.value;
   if (gPet && gPet.species==='frog') st.buff.poisonDmgMul *= (1+gPet.value);
-  SLOTS.forEach(s=>s.unit=null);
+  SLOTS = makeSlots(BASE_SLOTS);
+  ADJ = buildAdj(BASE_SLOTS);
 }
 reset();
 
@@ -451,6 +479,13 @@ function update(dt){
   if (st.chapterBanner){ st.chapterBanner.t += dt; if (st.chapterBanner.t>2) st.chapterBanner=null; }
   if (st.mode!=='play') return;
   st.diversity = computeDiversity();
+
+  // 防卡死自動擴格:每 0.5 秒節流檢查一次,全滿且無可合成對就擴一格。
+  st.deadlockT -= dt;
+  if (st.deadlockT<=0){
+    st.deadlockT = 0.5;
+    if (isDeadlocked()) grantExtraSlot();
+  }
 
   // wave flow
   if (st.inWave){
@@ -664,7 +699,9 @@ function draw(){
     // 立繪(Q版貓咪英雄 sprite):等比縮放,腳底貼牆帶頂緣,水平置中於槽位;圖片未 loaded 時 fallback 畫原 emoji
     const simg = SPRITE_IMGS[u.type];
     if (simg && simg.complete && simg.naturalWidth>0){
-      const sh = 46*pop, sw = sh*(simg.naturalWidth/simg.naturalHeight);
+      const spacing = W/SLOTS.length;
+      const baseSH = Math.min(46, spacing-4);
+      const sh = baseSH*pop, sw = sh*(simg.naturalWidth/simg.naturalHeight);
       const feetY = s.y+22+wob*.3;
       ctx.drawImage(simg, s.x-sw/2, feetY-sh, sw, sh);
     } else {
