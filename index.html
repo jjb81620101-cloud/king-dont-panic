@@ -193,6 +193,7 @@
     <div class="score">你守住了 <b id="finalWave">0</b> 波<br><span id="bestLine" style="font-size:14px;opacity:.85"></span></div>
     <div class="chapterList" id="chapterList"></div>
     <button class="btn" id="againBtn">再來一場</button>
+    <button class="btn ghost" id="overMenuBtn">回選單</button>
   </div>
 </div>
 
@@ -1470,6 +1471,11 @@ cv.addEventListener('pointerdown',tap);
 document.getElementById('startBtn').onclick=()=>{
   document.getElementById('menu').classList.add('hidden');
   reset(); st.mode='play'; beep(660,.15,'triangle',.06,990);
+};
+document.getElementById('overMenuBtn').onclick=()=>{
+  document.getElementById('over').classList.add('hidden');
+  st.mode='menu';
+  document.getElementById('menu').classList.remove('hidden');
 };
 document.getElementById('againBtn').onclick=()=>{
   document.getElementById('over').classList.add('hidden');
