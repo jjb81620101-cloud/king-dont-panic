@@ -134,8 +134,9 @@
   .petSlotCard .nm{font-size:11.5px;font-weight:800;margin-top:2px}
   .petSlotCard .rk{font-size:10px;opacity:.85}
   .petPicker{width:100%;background:var(--card);color:var(--ink);border-radius:12px;padding:8px 10px;display:flex;flex-direction:column;gap:6px;box-sizing:border-box}
-  .petPicker .opt{font-family:inherit;font-size:11.5px;font-weight:700;background:rgba(0,0,0,.06);border:none;border-radius:8px;padding:7px 9px;cursor:pointer;text-align:left}
+  .petPicker .opt{font-family:inherit;font-size:11.5px;font-weight:700;background:rgba(0,0,0,.06);border:none;border-radius:8px;padding:7px 9px;cursor:pointer;text-align:left;width:100%;box-sizing:border-box}
   .petPicker .opt.clearOpt{color:var(--coral)}
+  .petPickerList{display:flex;flex-direction:column;gap:6px;max-height:220px;overflow-y:auto;box-sizing:border-box}
 </style>
 
 <div id="wrap">
@@ -642,6 +643,18 @@ function loadVault(){
   });
   if (!Array.isArray(v.petSlots) || v.petSlots.length!==2) v.petSlots = [null, null];
   v.petSlots = v.petSlots.map(p => (p && typeof p==='object' && PET_TABLE[p.species] && RARITY.some(r=>r.key===p.rarity)) ? p : null);
+  // --- petOwned 收藏層(bug fix:合成分解流失,無版號自癒遷移,參考上方 petSlots 防禦寫法)---
+  // 每種寵物最多收藏一隻(最強者)。不存在/型別壞掉就重建;每次載入都把 petSlots 內現有寵物併入(舊存檔遷移 + 自癒)。
+  if (!v.petOwned || typeof v.petOwned!=='object' || Array.isArray(v.petOwned)) v.petOwned = {};
+  Object.keys(v.petOwned).forEach(sp=>{
+    const p = v.petOwned[sp];
+    if (!(p && typeof p==='object' && !Array.isArray(p) && p.species===sp && PET_TABLE[sp] && RARITY.some(r=>r.key===p.rarity))) delete v.petOwned[sp];
+  });
+  v.petSlots.forEach(p=>{
+    if (!p) return;
+    const existing = v.petOwned[p.species];
+    if (!existing || isGearStronger(p, existing)) v.petOwned[p.species] = p;
+  });
   if (!v.petShards || typeof v.petShards!=='object' || Array.isArray(v.petShards)) v.petShards = {};
   PET_SPECIES.forEach(sp=>{ if (typeof v.petShards[sp]!=='number' || isNaN(v.petShards[sp]) || v.petShards[sp]<0) v.petShards[sp] = 0; });
 
@@ -805,8 +818,10 @@ function gachaTen(){
   beep(720,.25,'triangle',.06,1080);
   return results;
 }
-// 寵物碎片合成(P3-S2):固定消耗 30 張,合成瞬間擲稀有度(N70/R22/SR6/SSR2,無保底);
-// 同種已在欄位中 → 取較高者,低者分解返 15💎;不同種且有空欄 → 直接裝入;不同種但雙欄已滿 → 分解返 15💎(手動替換留待 Step2 UI)。
+// 寵物碎片合成(P3-S2,收藏層 bug fix 後改寫):固定消耗 30 張,合成瞬間擲稀有度(N70/R22/SR6/SSR2,無保底);
+// 每種寵物收藏(vault.petOwned)最多一隻(最強者):收藏沒有 → 直接入收藏,無分解;新強於收藏 → 收藏換新,舊的分解返
+// 15💎;新弱於/等於收藏 → 新的分解返 15💎,收藏不變。若該 species 正裝備在某欄且收藏更新了 → 同步更新該欄;
+// 若該 species 未裝備且有空欄 → 自動裝入空欄。新寵不再有「雙欄已滿直接分解」的流失情況,至少會進收藏。
 function craftPet(species){
   if (!PET_TABLE[species]) return { ok:false, msg:'無效寵物' };
   const have = vault.petShards[species]||0;
@@ -814,25 +829,41 @@ function craftPet(species){
   vault.petShards[species] -= PET_CRAFT_COST;
   const r = weightedPick(RARITY);
   const item = { species, rarity:r.key, star:r.star, value:PET_TABLE[species].values[r.star-1] };
-  const dupIdx = vault.petSlots.findIndex(p=>p && p.species===species);
-  let equipped = false, refund = 0, targetSlot = -1;
-  if (dupIdx>=0){
-    const old = vault.petSlots[dupIdx];
-    if (isGearStronger(item, old)){ vault.petSlots[dupIdx] = item; equipped = true; targetSlot = dupIdx; }
-    refund = PET_DISASSEMBLE_REFUND; // 兩者中較弱的一個(新或舊)分解,固定返 15💎
+
+  const owned = vault.petOwned[species] || null;
+  const equippedIdx = vault.petSlots.findIndex(p=>p && p.species===species);
+  let refund = 0, collectionItem, newWon = true;
+  if (!owned){
+    vault.petOwned[species] = item; collectionItem = item; // 收藏原本沒有 → 直接入收藏,無分解
+  } else if (isGearStronger(item, owned)){
+    vault.petOwned[species] = item; collectionItem = item; refund = PET_DISASSEMBLE_REFUND; // 新強,舊寵分解
   } else {
-    const emptyIdx = vault.petSlots.findIndex(p=>!p);
-    if (emptyIdx>=0){ vault.petSlots[emptyIdx] = item; equipped = true; targetSlot = emptyIdx; }
-    else { refund = PET_DISASSEMBLE_REFUND; }
+    collectionItem = owned; newWon = false; refund = PET_DISASSEMBLE_REFUND; // 新弱,新寵分解
   }
+
+  let equipped = false, targetSlot = -1;
+  if (equippedIdx>=0){
+    targetSlot = equippedIdx;
+    if (newWon){ vault.petSlots[equippedIdx] = collectionItem; equipped = true; } // 裝備中同步更新
+  } else if (newWon){
+    const emptyIdx = vault.petSlots.findIndex(p=>!p);
+    if (emptyIdx>=0){ vault.petSlots[emptyIdx] = collectionItem; equipped = true; targetSlot = emptyIdx; }
+  }
+
   if (refund) vault.diamonds += refund;
   saveVault();
-  const msg = equipped
-    ? ('合成 '+petItemLabel(species,item)+' 成功!裝入第'+(targetSlot+1)+'欄'+(refund?'(舊寵分解 +'+refund+'💎)':''))
-    : ('合成 '+petItemLabel(species,item)+',較弱或雙欄已滿,已分解 +'+refund+'💎');
+
+  let msg;
+  if (!newWon){
+    msg = '合成 '+petItemLabel(species,item)+',較弱已分解 +'+refund+'💎';
+  } else if (equipped){
+    msg = '合成 '+petItemLabel(species,collectionItem)+' 成功!裝入第'+(targetSlot+1)+'欄'+(refund?'(舊寵分解 +'+refund+'💎)':'');
+  } else {
+    msg = '合成 '+petItemLabel(species,collectionItem)+' 成功!已入收藏(點欄位可裝備)'+(refund?'(舊寵分解 +'+refund+'💎)':'');
+  }
   vaultMsg(msg);
   renderVault();
-  return { ok:true, equipped, refund, item, slot:targetSlot, msg };
+  return { ok:true, equipped, refund, item, slot:targetSlot, msg, owned:vault.petOwned[species] };
 }
 
 /* ---------- 人物等級系統(PLAN S2) ---------- */
@@ -2005,20 +2036,31 @@ function renderPetSlots(){
     };
   });
 }
-// 雙寵欄選擇器(P3-S2「點欄位可從已擁有寵物中選擇替換」):資料層僅提供 2 欄位,故「已擁有」= 目前兩欄中的寵物,
-// 可與另一欄互換,或卸下清空(騰出空欄供下次合成直接裝入新種)。直接操作 vault.petSlots(UI 交線,未觸碰 craftPet 等資料層函式)。
+// 雙寵欄選擇器(bug fix 改寫:點空欄位現在可從整個收藏 vault.petOwned 選寵物,不再只限兩欄互換)。
+// 列出收藏中所有寵物,排除「已裝在另一欄的 species」(同種不可重複裝);點了裝入本欄,覆蓋原有(原有仍在收藏,不分解不返鑽)。
+// 保留:與另一欄互換、卸下第N欄(卸下只清 slot,收藏保留)。直接操作 vault.petSlots(UI 交線,未觸碰 craftPet 等資料層函式)。
 function renderPetPicker(){
   const box = document.getElementById('petPickerBox'); if (!box) return;
   if (selectedPetSlotIdx===null){ box.innerHTML = ''; return; }
   const idx = selectedPetSlotIdx, other = idx===0?1:0;
   const cur = vault.petSlots[idx], otherPet = vault.petSlots[other];
+  const ownedList = Object.keys(vault.petOwned)
+    .map(sp=>vault.petOwned[sp])
+    .filter(p=>!(otherPet && p.species===otherPet.species));
   let html = '<div class="petPicker">';
   if (otherPet){
     const info = PET_TABLE[otherPet.species];
     html += '<button class="opt" id="petSwapBtn">與第'+(other+1)+'欄互換:'+info.icon+info.name+'('+otherPet.rarity+')</button>';
   }
   if (cur) html += '<button class="opt clearOpt" id="petClearBtn">卸下第'+(idx+1)+'欄</button>';
-  if (!otherPet && !cur) html += '<div style="font-size:11.5px;opacity:.8">兩欄皆空,請先合成寵物</div>';
+  if (ownedList.length){
+    html += '<div class="petPickerList">' + ownedList.map(p=>{
+      const info = PET_TABLE[p.species];
+      return '<button class="opt petOwnedOpt" data-sp="'+p.species+'">'+info.icon+info.name+' '+p.rarity+' ・ '+petValueTxt(p.species,p.value)+'</button>';
+    }).join('') + '</div>';
+  } else if (!otherPet && !cur){
+    html += '<div style="font-size:11.5px;opacity:.8">請先合成寵物</div>';
+  }
   html += '</div>';
   box.innerHTML = html;
   const swapBtn = document.getElementById('petSwapBtn');
@@ -2035,6 +2077,16 @@ function renderPetPicker(){
     renderPetSlots(); renderPetPicker(); renderPetList();
     vaultMsg('已卸下第'+(idx+1)+'欄寵物'); beep(300,.12,'sawtooth');
   };
+  box.querySelectorAll('.petOwnedOpt').forEach(b=>{
+    b.onclick = ()=>{
+      const sp = b.dataset.sp;
+      const p = vault.petOwned[sp]; if (!p) return;
+      vault.petSlots[idx] = p;
+      saveVault(); selectedPetSlotIdx = null;
+      renderPetSlots(); renderPetPicker(); renderPetList();
+      vaultMsg('第'+(idx+1)+'欄已裝備 '+PET_TABLE[sp].icon+PET_TABLE[sp].name); beep(520,.12,'triangle');
+    };
+  });
 }
 // 寵物頁:12 種寵物 × 碎片進度條,達門檻顯示「合成」按鈕(craftPet 已含裝備/分解邏輯)
 function renderPetList(){
@@ -2044,10 +2096,12 @@ function renderPetList(){
     const info = PET_TABLE[sp];
     const slotIdx = vault.petSlots.findIndex(p=>p && p.species===sp);
     const equipped = slotIdx>=0;
+    const ownedItem = vault.petOwned[sp]||null;
     const have = vault.petShards[sp]||0;
     const pct = Math.min(100, Math.round(have/PET_CRAFT_COST*100));
+    const statusTag = equipped ? ('(第'+(slotIdx+1)+'欄裝備中 '+vault.petSlots[slotIdx].rarity+')') : (ownedItem ? ('(已擁有 '+ownedItem.rarity+')') : '');
     const block = document.createElement('div'); block.className = 'petBlock';
-    let html = '<div class="hd"><span>'+info.icon+'</span><span>'+info.name+(equipped?('(第'+(slotIdx+1)+'欄裝備中 '+vault.petSlots[slotIdx].rarity+')'):'')+'<small style="font-weight:400;display:block">'+info.desc+'</small></span></div>'+
+    let html = '<div class="hd"><span>'+info.icon+'</span><span>'+info.name+statusTag+'<small style="font-weight:400;display:block">'+info.desc+'</small></span></div>'+
       '<div class="petRarRow"><div class="prog"><i style="width:'+pct+'%;background:#FFC94D"></i></div>'+
       '<span class="amt">'+have+'/'+PET_CRAFT_COST+'</span>'+
       (have>=PET_CRAFT_COST ? ('<button class="craftBtn" data-sp="'+sp+'">合成</button>') : '')+
